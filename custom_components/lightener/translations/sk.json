@@ -2,47 +2,59 @@
   "config": {
     "step": {
       "user": {
-        "title": "Vytvorte zariadenie Lightener",
-        "description": "Zadajte názov zariadenia Lightener, ktoré vytvárate",
+        "title": "Nov\u00e9 zariadenie Lightener",
+        "description": "",
         "data": {
-          "name": "Názov zariadenia"
+          "name": "N\u00e1zov"
         },
         "data_description": {
-          "name": "Účelom je jasne uviesť, ktorá skupina svetiel je týmto zariadením ovládaná. Zvyčajne je to názov oblasti alebo miestnosti, napríklad \"Obývačka\", ale môže to byť čokoľvek"
+          "name": "Najlep\u0161ie funguje n\u00e1zov miestnosti alebo oblasti, napr. \"Ob\u00fdva\u010dka\""
         }
       },
       "lights": {
-        "title": "Ovládané svetlá",
-        "description": "Vyberte svetlá a počiatočnú predvoľbu krivky. Existujúce/nové krivky môžete po nastavení doladiť vizuálne v bočnom paneli **Lightener Editor** (`/lightener-editor`) alebo v karte **Lightener Curve Editor**.",
+        "title": "Vybra\u0165 svetl\u00e1",
         "data": {
-          "controlled_entities": "Vyberte svetelné entity, ktoré chcete ovládať týmto zariadením Lightener",
-          "curve_preset": "Počiatočná predvoľba krivky pre novo pridané svetlá"
+          "controlled_entities": "Svetl\u00e1 na ovl\u00e1danie"
+        }
+      },
+      "light_configuration": {
+        "title": "Krivka jasu \"{light_name}\"",
+        "description": "Aktu\u00e1lne: {current_brightness}",
+        "data": {
+          "brightness": "Krivka jasu"
         },
         "data_description": {
-          "curve_preset": "Použije sa iba pri pridávaní nových svetiel. Existujúce krivky zostanú zachované."
+          "brightness": "Jedno mapovanie na riadok ako skupina:svetlo. Pr\u00edklad: \"60:100\" znamen\u00e1, \u017ee pri 60% jasu skupiny toto svetlo dosiahne 100%."
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Vyberte aspoň jedno svetlo"
+      "controlled_entities_empty": "Vyberte aspo\u0148 jedno svetlo",
+      "invalid_brightness": "Neplatn\u00fd z\u00e1znam \"{error_entry}\". Pou\u017eite form\u00e1t \"X:Y\" kde X je 1\u2013100 a Y je 0\u2013100, napr. \"40:100\""
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Ovládané svetlá",
-        "description": "Nižšie pridajte alebo odstráňte svetlá a vyberte počiatočnú predvoľbu pre nové svetlá. Existujúce krivky jasu zostanú zachované. Na vizuálne úpravy použite bočný panel **Lightener Editor** (`/lightener-editor`) alebo kartu **Lightener Curve Editor** na paneli.",
+        "title": "Vybra\u0165 svetl\u00e1",
         "data": {
-          "controlled_entities": "Vyberte svetelné entity, ktoré chcete ovládať týmto zariadením Lightener",
-          "curve_preset": "Počiatočná predvoľba krivky pre novo pridané svetlá"
+          "controlled_entities": "Svetl\u00e1 na ovl\u00e1danie"
+        }
+      },
+      "light_configuration": {
+        "title": "Krivka jasu \"{light_name}\"",
+        "description": "Aktu\u00e1lne: {current_brightness}",
+        "data": {
+          "brightness": "Krivka jasu"
         },
         "data_description": {
-          "curve_preset": "Použije sa iba na svetlá pridané v tomto kroku."
+          "brightness": "Jedno mapovanie na riadok ako skupina:svetlo. Pr\u00edklad: \"60:100\" znamen\u00e1, \u017ee pri 60% jasu skupiny toto svetlo dosiahne 100%."
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Vyberte aspoň jedno svetlo"
+      "controlled_entities_empty": "Vyberte aspo\u0148 jedno svetlo",
+      "invalid_brightness": "Neplatn\u00fd z\u00e1znam \"{error_entry}\". Pou\u017eite form\u00e1t \"X:Y\" kde X je 1\u2013100 a Y je 0\u2013100, napr. \"40:100\""
     }
   }
 }

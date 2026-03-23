@@ -2,47 +2,59 @@
   "config": {
     "step": {
       "user": {
-        "title": "Criar um dispositivo Lightener",
-        "description": "Por favor, forneça um nome para o dispositivo Lightener que você está criando",
+        "title": "Novo dispositivo Lightener",
+        "description": "",
         "data": {
-          "name": "Nome do dispositivo"
+          "name": "Nome"
         },
         "data_description": {
-          "name": "O objetivo é indicar claramente qual grupo de luzes é controlado por este dispositivo. Normalmente, é o nome de uma área ou cômodo, como \"Sala de Estar\", mas pode ser qualquer coisa."
+          "name": "Um nome de c\u00f4modo ou \u00e1rea funciona melhor, ex. \"Sala de Estar\""
         }
       },
       "lights": {
-        "title": "Luzes controladas",
-        "description": "Escolha suas luzes e um preset inicial de curva. Curvas existentes/novas podem ser ajustadas visualmente no painel lateral **Lightener Editor** (`/lightener-editor`) ou no cartão **Lightener Curve Editor** após a configuração.",
+        "title": "Selecionar luzes",
         "data": {
-          "controlled_entities": "Selecione as entidades de luz a serem controladas por este dispositivo Lightener",
-          "curve_preset": "Preset inicial de curva para luzes adicionadas"
+          "controlled_entities": "Luzes a controlar"
+        }
+      },
+      "light_configuration": {
+        "title": "Curva de brilho de \"{light_name}\"",
+        "description": "Atualmente: {current_brightness}",
+        "data": {
+          "brightness": "Curva de brilho"
         },
         "data_description": {
-          "curve_preset": "Aplicado somente ao adicionar novas luzes. As curvas existentes são mantidas."
+          "brightness": "Um mapeamento por linha como grupo:luz. Exemplo: \"60:100\" significa que a 60% de brilho do grupo, esta luz atinge 100%."
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Selecione pelo menos uma luz"
+      "controlled_entities_empty": "Selecione pelo menos uma luz",
+      "invalid_brightness": "Entrada inv\u00e1lida \"{error_entry}\". Use o formato \"X:Y\" onde X \u00e9 1\u2013100 e Y \u00e9 0\u2013100, ex. \"40:100\""
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Luzes controladas",
-        "description": "Adicione ou remova luzes abaixo e escolha um preset inicial para novas luzes. As curvas de brilho existentes são preservadas. Para editar visualmente, use o painel lateral **Lightener Editor** (`/lightener-editor`) ou o cartão **Lightener Curve Editor** no seu painel.",
+        "title": "Selecionar luzes",
         "data": {
-          "controlled_entities": "Selecione as entidades de luz a serem controladas por este dispositivo Lightener",
-          "curve_preset": "Preset inicial de curva para luzes adicionadas"
+          "controlled_entities": "Luzes a controlar"
+        }
+      },
+      "light_configuration": {
+        "title": "Curva de brilho de \"{light_name}\"",
+        "description": "Atualmente: {current_brightness}",
+        "data": {
+          "brightness": "Curva de brilho"
         },
         "data_description": {
-          "curve_preset": "Aplicado somente às luzes adicionadas nesta etapa."
+          "brightness": "Um mapeamento por linha como grupo:luz. Exemplo: \"60:100\" significa que a 60% de brilho do grupo, esta luz atinge 100%."
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Selecione pelo menos uma luz"
+      "controlled_entities_empty": "Selecione pelo menos uma luz",
+      "invalid_brightness": "Entrada inv\u00e1lida \"{error_entry}\". Use o formato \"X:Y\" onde X \u00e9 1\u2013100 e Y \u00e9 0\u2013100, ex. \"40:100\""
     }
   }
 }
