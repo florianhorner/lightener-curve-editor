@@ -34,6 +34,49 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
+/**
+ * Build a smooth SVG cubic-bezier path through control points.
+ * Uses monotone cubic interpolation to avoid overshoot.
+ */
+function buildSmoothPath(
+  points: { x: number; y: number }[]
+): string {
+  if (points.length < 2) return "";
+  if (points.length === 2) {
+    return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
+  }
+
+  // Compute tangents using finite differences (monotone)
+  const n = points.length;
+  const dx: number[] = [];
+  const dy: number[] = [];
+  const m: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(points[i + 1].x - points[i].x);
+    dy.push(points[i + 1].y - points[i].y);
+    m.push(dy[i] / (dx[i] || 1));
+  }
+
+  // Tangent at each point
+  const tangents: number[] = new Array(n);
+  tangents[0] = m[0];
+  tangents[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    tangents[i] = (m[i - 1] + m[i]) / 2;
+  }
+
+  let d = `M${points[0].x},${points[0].y}`;
+  for (let i = 0; i < n - 1; i++) {
+    const seg = dx[i] / 3;
+    const cp1x = points[i].x + seg;
+    const cp1y = points[i].y + tangents[i] * seg;
+    const cp2x = points[i + 1].x - seg;
+    const cp2y = points[i + 1].y - tangents[i + 1] * seg;
+    d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${points[i + 1].x},${points[i + 1].y}`;
+  }
+  return d;
+}
+
 @customElement("curve-graph")
 export class CurveGraph extends LitElement {
   @property({ type: Array }) curves: LightCurve[] = [];
@@ -71,17 +114,17 @@ export class CurveGraph extends LitElement {
     }
     .axis-label {
       fill: var(--secondary-text, #9e9e9e);
-      font-size: 9px;
+      font-size: 10px;
       font-family: inherit;
     }
     .tick-label {
       fill: var(--secondary-text, #9e9e9e);
-      font-size: 9px;
+      font-size: 10px;
       font-family: inherit;
     }
     .curve-line {
       fill: none;
-      stroke-width: 2;
+      stroke-width: 2.5;
       stroke-linecap: round;
       stroke-linejoin: round;
       transition: opacity 0.3s ease;
@@ -363,11 +406,28 @@ export class CurveGraph extends LitElement {
       curve.entityId === this.selectedCurveId;
     const showPoints = isSelected && !this.readOnly;
 
-    const values = interpolateCurve(curve.controlPoints);
-    // Build polyline points, sampling every 1%
-    const points = values
-      .map((v, i) => `${toSvgX(i)},${toSvgY(v)}`)
-      .join(" ");
+    // Build smooth bezier path through the prepared control points
+    const prepared = curve.controlPoints.slice().sort((a, b) => a.lightener - b.lightener);
+    // Ensure 0:0 origin
+    if (!prepared.length || prepared[0].lightener !== 0) {
+      prepared.unshift({ lightener: 0, target: 0 });
+    }
+    // Ensure 100 endpoint
+    if (prepared[prepared.length - 1].lightener !== 100) {
+      prepared.push({ lightener: 100, target: 100 });
+    }
+    const pathPoints = prepared.map((cp) => ({
+      x: toSvgX(cp.lightener),
+      y: toSvgY(cp.target),
+    }));
+    const curvePath = buildSmoothPath(pathPoints);
+
+    // Gradient fill path: close the curve to the x-axis
+    const fillPath = curvePath +
+      ` L${toSvgX(prepared[prepared.length - 1].lightener)},${toSvgY(0)}` +
+      ` L${toSvgX(0)},${toSvgY(0)} Z`;
+
+    const gradientId = `grad-${curveIdx}`;
 
     const isDraggingThisCurve = this._dragCurveIdx === curveIdx;
     const fillColor = curve.color + "33"; // 20% opacity version
@@ -385,10 +445,21 @@ export class CurveGraph extends LitElement {
     }
 
     return svg`
+      <defs>
+        <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.25 : 0.08}" />
+          <stop offset="100%" stop-color="${curve.color}" stop-opacity="0" />
+        </linearGradient>
+      </defs>
       ${isDraggingThisCurve ? this._renderCrossHair(curve) : nothing}
-      <polyline
+      <path
+        d="${fillPath}"
+        fill="url(#${gradientId})"
+        style="opacity: ${lineOpacity}"
+      />
+      <path
         class="curve-line"
-        points="${points}"
+        d="${curvePath}"
         stroke="${curve.color}"
         style="opacity: ${lineOpacity}"
       />
@@ -404,7 +475,7 @@ export class CurveGraph extends LitElement {
                 class="hit-circle"
                 cx="${toSvgX(cp.lightener)}"
                 cy="${toSvgY(cp.target)}"
-                r="16"
+                r="20"
                 fill="transparent"
                 pointer-events="all"
                 @pointerdown=${(e: PointerEvent) =>
