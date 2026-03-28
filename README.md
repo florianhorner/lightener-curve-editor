@@ -1,7 +1,10 @@
-# Lightener
+# Lightener (Interactive Curve Editor Fork)
 
 [![GitHub Release][releases-shield]][releases]
 [![hacs][hacsbadge]][hacs]
+
+> **This is a development fork of [fredck/lightener](https://github.com/fredck/lightener).**
+> It adds an interactive brightness curve editor card for visual editing of per-light brightness mappings directly in the Home Assistant dashboard. The goal is to merge these features back to the upstream project once development and testing are complete. See [fredck/lightener#149](https://github.com/fredck/lightener/issues/149) for the original feature proposal.
 
 Lightener is a Home Assistant integration used to create virtual lights that can control a group of lights. It offers the added benefit of controlling the state (on/off) and brightness level of each light independently.
 
@@ -34,6 +37,16 @@ Lightener makes this magic possible.
 ### Using HACS (recommended)
 
 Simply search for `Lightener` in HACS and easily install it.
+
+### Installing this fork (for testing the curve editor)
+
+1. In HACS, go to the three-dot menu and select "Custom repositories."
+2. Add `florianhorner/lightener` as an Integration.
+3. Install "Lightener" from HACS. It will pick up the latest beta release from this fork.
+4. Restart Home Assistant.
+5. Add a card to your dashboard with type `custom:lightener-curve-card` and set `entity` to your Lightener device entity.
+
+> **Note:** This fork replaces the upstream Lightener integration. To go back to upstream, remove the custom repository and reinstall from the default HACS store.
 
 ### Manual
 
@@ -93,8 +106,37 @@ For example, if an On/Off Light is configured with "20:0, 50:30, 100:0," it will
 
 Have fun!
 
+## Interactive Curve Editor (this fork)
+
+This fork adds a Lovelace card that lets you visually edit brightness curves instead of typing number pairs by hand.
+
+### What it does
+
+- Shows all controlled lights as overlaid curves on a single graph
+- Click a legend item to select a curve, then drag its control points to reshape it
+- Double-click the graph to add new control points, right-click a point to remove it
+- Save/Cancel footer with a dirty-state indicator so you never lose unsaved work
+- Read-only mode for non-admin users (lock icon, no draggable points)
+- Works in both dark and light Home Assistant themes
+
+### Adding the card
+
+```yaml
+type: custom:lightener-curve-card
+entity: light.your_lightener_device
+```
+
+### What's planned
+
+This fork is a testing ground. Once the curve editor is stable and reviewed, the plan is to propose it as a PR to [fredck/lightener](https://github.com/fredck/lightener). Remaining work before that:
+
+- Integration testing in real HA instances
+- Keyboard navigation and ARIA accessibility
+- Touch fallback for mobile (tap-to-select + numeric input)
+- Point deletion via long-press on touch devices
+
 [hacs]: https://github.com/hacs/integration
 [hacsbadge]: https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge
 
-[releases-shield]: https://img.shields.io/github/release/fredck/lightener.svg?style=for-the-badge
-[releases]: https://github.com/fredck/lightener/releases
+[releases-shield]: https://img.shields.io/github/release/florianhorner/lightener.svg?style=for-the-badge&include_prereleases
+[releases]: https://github.com/florianhorner/lightener/releases
