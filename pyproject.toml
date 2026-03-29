@@ -1,9 +1,38 @@
-[tool.black]
+[tool.ruff]
+target-version = "py312"
 line-length = 88
-include = '\\.pyi?$'
-exclude = [
-    '/\.git',
-    '/__pycache__',
-    '/build',
-    '/dist'
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["N802", "N803"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = false
+ignore_missing_imports = true
+warn_return_any = false
+warn_unused_configs = true
+disable_error_code = [
+    "call-arg",
+    "var-annotated",
+    "assignment",
+    "index",
+    "arg-type",
+    "union-attr",
+    "return-value",
+    "has-type",
+    "attr-defined",
+    "unused-coroutine",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/components/lightener"]
+asyncio_mode = "auto"
