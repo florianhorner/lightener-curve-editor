@@ -1,7 +1,6 @@
 import { LitElement, html, css, svg, nothing, PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { LightCurve, ControlPoint } from "../utils/types.js";
-import { interpolateCurve } from "../utils/interpolation.js";
 
 // Graph coordinate system: SVG viewBox with padding for axis labels.
 const PAD_LEFT = 44;

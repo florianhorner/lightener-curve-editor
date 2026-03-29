@@ -235,7 +235,7 @@ class LightenerLight(LightGroup):
                     entity.type,
                     entity_data,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _LOGGER.exception(
                     "Service `%s` for `%s` (%s) failed: %s; payload=%s",
                     service,

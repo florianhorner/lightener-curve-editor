@@ -19,8 +19,9 @@ PLATFORMS = [Platform.LIGHT]
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Lightener integration."""
-    from . import websocket
     from homeassistant.components.http import StaticPathConfig
+
+    from . import websocket
 
     websocket.async_register_commands(hass)
 
@@ -79,7 +80,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
 
 async def async_migrate_data(
-    data: MappingProxyType[str, Any], version: int = None
+    data: MappingProxyType[str, Any], version: int | None = None
 ) -> MappingProxyType[str, Any]:
     """Update data from old versions of the configuration to the current format."""
 
