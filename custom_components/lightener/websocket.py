@@ -20,6 +20,8 @@ def async_register_commands(hass: HomeAssistant) -> None:
         vol.Required("entity_id"): str,
     }
 )
+# Read access is intentionally not admin-gated: curve data is not sensitive,
+# and non-admin users need to see curves on their dashboards.
 @callback
 def ws_get_curves(hass, connection, msg):
     """Return brightness curves for a Lightener entity."""
