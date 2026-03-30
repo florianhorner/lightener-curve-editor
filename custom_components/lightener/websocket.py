@@ -112,6 +112,15 @@ async def ws_save_curves(hass, connection, msg):
     new_data = dict(config_entry.data)
     new_entities = dict(new_data.get("entities", {}))
 
+    # Reject unknown entity IDs instead of silently dropping them
+    unknown = [eid for eid in curves if eid not in new_entities]
+    if unknown:
+        connection.send_error(
+            msg["id"], "unknown_entities",
+            f"Unknown entity IDs: {unknown}"
+        )
+        return
+
     for controlled_entity_id, entity_data in curves.items():
         if controlled_entity_id in new_entities:
             new_entity = dict(new_entities[controlled_entity_id])
