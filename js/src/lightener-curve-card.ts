@@ -1,4 +1,4 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { LightCurve, Hass } from './utils/types.js';
 import { curvesToWsPayload, wsPayloadToCurves, cloneCurves, curvesEqual } from './utils/data.js';
@@ -6,6 +6,8 @@ import './components/curve-graph.js';
 import './components/curve-scrubber.js';
 import './components/curve-legend.js';
 import './components/curve-footer.js';
+
+const SAVE_SUCCESS_DISPLAY_MS = 2000;
 
 const CURVE_COLORS = [
   '#42a5f5',
@@ -75,6 +77,9 @@ export class LightenerCurveCard extends LitElement {
   @state() private _hass: Hass | null = null;
   private _loaded = false;
   private _loadedEntityId: string | undefined = undefined;
+  private _boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private _boundBeforeUnload: ((e: BeforeUnloadEvent) => void) | null = null;
+  private _saveSuccessTimer: ReturnType<typeof setTimeout> | null = null;
 
   static styles = css`
     :host {
@@ -194,10 +199,11 @@ export class LightenerCurveCard extends LitElement {
     if (this._boundBeforeUnload) {
       window.removeEventListener('beforeunload', this._boundBeforeUnload);
     }
+    if (this._saveSuccessTimer) {
+      clearTimeout(this._saveSuccessTimer);
+      this._saveSuccessTimer = null;
+    }
   }
-
-  private _boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
-  private _boundBeforeUnload: ((e: BeforeUnloadEvent) => void) | null = null;
 
   private _onKeyDown(e: KeyboardEvent): void {
     // Ctrl+S / Cmd+S to save
@@ -351,9 +357,10 @@ export class LightenerCurveCard extends LitElement {
       });
       this._originalCurves = cloneCurves(this._curves);
       this._saveSuccess = true;
-      setTimeout(() => {
+      this._saveSuccessTimer = setTimeout(() => {
         this._saveSuccess = false;
-      }, 2000);
+        this._saveSuccessTimer = null;
+      }, SAVE_SUCCESS_DISPLAY_MS);
     } catch (err) {
       console.error('[Lightener] Failed to save curves:', err);
       this._saveError = 'Save failed. Check connection.';
@@ -416,9 +423,9 @@ export class LightenerCurveCard extends LitElement {
           @cancel-curves=${this._onCancel}
         ></curve-footer>
 
-        ${this._saveSuccess ? html`<div class="success">Saved successfully</div>` : ''}
-        ${this._loadError ? html`<div class="error">Failed to load curves</div>` : ''}
-        ${this._saveError ? html`<div class="error">${this._saveError}</div>` : ''}
+        ${this._saveSuccess ? html`<div class="success">Saved successfully</div>` : nothing}
+        ${this._loadError ? html`<div class="error">Failed to load curves</div>` : nothing}
+        ${this._saveError ? html`<div class="error">${this._saveError}</div>` : nothing}
       </div>
     `;
   }

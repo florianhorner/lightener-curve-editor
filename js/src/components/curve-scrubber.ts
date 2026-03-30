@@ -205,6 +205,7 @@ export class CurveScrubber extends LitElement {
   render() {
     const ticks = [0, 25, 50, 75, 100];
     const bars = this._getInterpolatedValues();
+    const pos = Math.round(this._position);
 
     return html`
       <div class="scrubber-container">
@@ -214,14 +215,12 @@ export class CurveScrubber extends LitElement {
           aria-label="Brightness scrubber"
           aria-valuemin="0"
           aria-valuemax="100"
-          aria-valuenow=${Math.round(this._position)}
-          aria-valuetext="${Math.round(this._position)}% brightness"
+          aria-valuenow=${pos}
+          aria-valuetext="${pos}% brightness"
           @click=${this._onTrackClick}
         >
           <div class="track-line"></div>
-          <div class="position-label" style="left: ${this._position}%">
-            ${Math.round(this._position)}%
-          </div>
+          <div class="position-label" style="left: ${this._position}%">${pos}%</div>
           ${ticks.map(
             (t) => html`
               <div class="tick" style="left: ${t}%"></div>
