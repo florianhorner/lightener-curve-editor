@@ -70,6 +70,7 @@ export class LightenerCurveCard extends LitElement {
   @state() private _saving = false;
   @state() private _loadError: string | null = null;
   @state() private _saveError: string | null = null;
+  @state() private _saveSuccess = false;
 
   @state() private _hass: Hass | null = null;
   private _loaded = false;
@@ -125,6 +126,21 @@ export class LightenerCurveCard extends LitElement {
       padding: 8px 0 0;
       text-align: center;
     }
+    .success {
+      font-size: 12px;
+      color: #66bb6a;
+      padding: 8px 0 0;
+      text-align: center;
+      animation: fade-in 0.2s ease;
+    }
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
   `;
 
   // --- HA card interface ---
@@ -163,6 +179,47 @@ export class LightenerCurveCard extends LitElement {
     this._loaded = false;
     this._loadedEntityId = undefined;
     this._tryLoadCurves();
+
+    this._boundKeyHandler = this._onKeyDown.bind(this);
+    this._boundBeforeUnload = this._onBeforeUnload.bind(this);
+    window.addEventListener('keydown', this._boundKeyHandler);
+    window.addEventListener('beforeunload', this._boundBeforeUnload);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this._boundKeyHandler) {
+      window.removeEventListener('keydown', this._boundKeyHandler);
+    }
+    if (this._boundBeforeUnload) {
+      window.removeEventListener('beforeunload', this._boundBeforeUnload);
+    }
+  }
+
+  private _boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private _boundBeforeUnload: ((e: BeforeUnloadEvent) => void) | null = null;
+
+  private _onKeyDown(e: KeyboardEvent): void {
+    // Ctrl+S / Cmd+S to save
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if (this._isDirty && this._isAdmin && !this._saving) {
+        e.preventDefault();
+        this._onSave();
+      }
+    }
+    // Escape to cancel
+    if (e.key === 'Escape') {
+      if (this._isDirty && !this._saving) {
+        e.preventDefault();
+        this._onCancel();
+      }
+    }
+  }
+
+  private _onBeforeUnload(e: BeforeUnloadEvent): void {
+    if (this._isDirty) {
+      e.preventDefault();
+    }
   }
 
   private async _tryLoadCurves(): Promise<void> {
@@ -293,6 +350,10 @@ export class LightenerCurveCard extends LitElement {
         curves: payload,
       });
       this._originalCurves = cloneCurves(this._curves);
+      this._saveSuccess = true;
+      setTimeout(() => {
+        this._saveSuccess = false;
+      }, 2000);
     } catch (err) {
       console.error('[Lightener] Failed to save curves:', err);
       this._saveError = 'Save failed. Check connection.';
@@ -308,7 +369,7 @@ export class LightenerCurveCard extends LitElement {
 
   render() {
     return html`
-      <div class="card">
+      <div class="card" role="region" aria-label="Brightness Curves Editor">
         <div class="header">
           <svg
             class="header-icon"
@@ -355,6 +416,7 @@ export class LightenerCurveCard extends LitElement {
           @cancel-curves=${this._onCancel}
         ></curve-footer>
 
+        ${this._saveSuccess ? html`<div class="success">Saved successfully</div>` : ''}
         ${this._loadError ? html`<div class="error">Failed to load curves</div>` : ''}
         ${this._saveError ? html`<div class="error">${this._saveError}</div>` : ''}
       </div>
