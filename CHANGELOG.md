@@ -8,36 +8,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Interactive brightness curve editor card (`custom:lightener-curve-card`) built with Lit 3.x
-- WebSocket API for curve data management (`lightener/get_curves`, `lightener/save_curves`)
-- Smooth bezier curves with gradient fills and colorblind-accessible dash patterns
-- Brightness scrubber with real-time bar gauge readouts
-- Keyboard shortcuts (Ctrl+S to save, Esc to cancel) and unsaved-changes guard
-- Light/dark theme support using Home Assistant CSS custom properties
-- Mobile-responsive layout with touch-optimised targets
-- Full CI pipeline: ruff, eslint, prettier, mypy, pytest, hassfest, HACS validation
-- Pre-commit hooks for ruff and JS lint-staged
-- SECURITY.md and GitHub auto-generated release notes config
+- Interactive brightness curve editor card (`custom:lightener-curve-card`)
+  - Visual editing of per-light brightness curves directly in the HA dashboard
+  - Smooth bezier curves with gradient fills
+  - Colorblind-accessible dash patterns to distinguish curves
+  - Brightness scrubber with real-time bar gauge readouts per light
+  - Keyboard shortcuts: Ctrl+S to save, Esc to cancel
+  - Unsaved-changes guard (browser prompt before navigating away)
+  - Light and dark theme support via Home Assistant CSS custom properties
+  - Mobile-responsive layout with touch-optimised controls
+- WebSocket API (`lightener/get_curves`, `lightener/save_curves`) for reading and writing brightness configs from the frontend
+  - Read access available to all authenticated users (for dashboard display)
+  - Write access restricted to Home Assistant administrators
 
 ### Changed
 
-- Renamed HACS display name to avoid confusion with upstream Lightener
-- Migrated pytest config from setup.cfg to pyproject.toml
-- Consolidated lint config (ruff in pyproject.toml, eslint for TypeScript)
+- Renamed HACS display name to "Lightener Curve Editor" to avoid confusion with upstream
 
 ### Fixed
 
 - Home Assistant 2026.x compatibility (`async_register_static_paths` API)
-- Missing closing parenthesis in static path registration
-- Z-index layering: selected curve now renders on top so all points are clickable
-- Curve load race condition prevented via deduplication flag
-- Right-click menu, line rendering, hit targets, and font sizing
-- Legend name truncation and dirty-state indicator
-- Clickable points, right-click delete, and colorblind dash patterns
-- Timer leak, field ordering, and platform forwarding
-- Double migration guard and unknown entity rejection
+- Overlapping curves: selected curve now renders on top so all control points stay clickable
+- Curve load race condition when Home Assistant sends rapid state updates
+- Legend name truncation for long entity names
+- Dirty-state indicator not clearing after save
+- Small hit targets making control points hard to grab
+- Timer leak when card is removed from the DOM
 
 ## [2.4.0] - Upstream
 
 This version matches [fredck/lightener](https://github.com/fredck/lightener) v2.4.0,
-from which this fork was created.
+from which this fork was created. All upstream functionality is included unchanged.
