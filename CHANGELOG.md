@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.8.1-beta.1] - 2026-04-03
+
+### Fixed
+
+- Home Assistant regression in Lightener setup for migrated configs
+- Incorrect double-wrapping of brightness mappings during v1-to-v2 migration
+- `configuration.yaml` setup path crash caused by mutating immutable migrated data
+
+### Notes
+
+- This is a development release intended for HACS pre-release testing on Home Assistant Green before `2.8.1` stable
+
 ### Added
 
 - Interactive brightness curve editor card (`custom:lightener-curve-card`)
