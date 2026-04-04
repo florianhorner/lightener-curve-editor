@@ -593,7 +593,7 @@ export class CurveGraph extends LitElement {
                 fill="${selected?.color ?? 'currentColor'}"
                 >Editing: ${selected?.friendlyName ?? ''}</text>
               <text class="hint" text-anchor="end"
-                x="${PAD_LEFT + GRAPH_W}" y="${PAD_TOP + GRAPH_H + 28}"
+                x="${PAD_LEFT + GRAPH_W - 4}" y="${PAD_TOP + GRAPH_H - 6}"
                 >Double-click to add · Right-click to remove</text>`;
         })()}
       </svg>
