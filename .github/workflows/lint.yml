@@ -95,3 +95,6 @@ jobs:
 
       - name: "TypeScript check"
         run: npx tsc --noEmit
+
+      - name: "Tests"
+        run: npx vitest run

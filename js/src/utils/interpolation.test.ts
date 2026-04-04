@@ -1,0 +1,128 @@
+import { describe, it, expect } from 'vitest';
+import { scaleRangedValue, prepareBrightnessConfig, interpolateCurve } from './interpolation.js';
+import { ControlPoint } from './types.js';
+
+describe('scaleRangedValue', () => {
+  it('maps midpoint correctly', () => {
+    expect(scaleRangedValue([0, 100], [0, 200], 50)).toBe(100);
+  });
+
+  it('maps start of range', () => {
+    expect(scaleRangedValue([0, 100], [10, 20], 0)).toBe(10);
+  });
+
+  it('maps end of range', () => {
+    expect(scaleRangedValue([0, 100], [10, 20], 100)).toBe(20);
+  });
+
+  it('handles inverted target range', () => {
+    expect(scaleRangedValue([0, 100], [100, 0], 25)).toBe(75);
+  });
+
+  it('handles non-zero source start', () => {
+    expect(scaleRangedValue([10, 20], [0, 100], 15)).toBe(50);
+  });
+});
+
+describe('prepareBrightnessConfig', () => {
+  it('adds implicit 0->0 origin', () => {
+    const points: ControlPoint[] = [{ lightener: 50, target: 75 }];
+    const prepared = prepareBrightnessConfig(points);
+    expect(prepared[0]).toEqual({ lightener: 0, target: 0 });
+  });
+
+  it('adds default 100->100 endpoint', () => {
+    const points: ControlPoint[] = [{ lightener: 50, target: 75 }];
+    const prepared = prepareBrightnessConfig(points);
+    const last = prepared[prepared.length - 1];
+    expect(last).toEqual({ lightener: 100, target: 100 });
+  });
+
+  it('preserves explicit 100 endpoint', () => {
+    const points: ControlPoint[] = [
+      { lightener: 50, target: 75 },
+      { lightener: 100, target: 60 },
+    ];
+    const prepared = prepareBrightnessConfig(points);
+    const last = prepared[prepared.length - 1];
+    expect(last).toEqual({ lightener: 100, target: 60 });
+  });
+
+  it('sorts by lightener value', () => {
+    const points: ControlPoint[] = [
+      { lightener: 80, target: 90 },
+      { lightener: 20, target: 30 },
+    ];
+    const prepared = prepareBrightnessConfig(points);
+    const values = prepared.map((p) => p.lightener);
+    expect(values).toEqual([0, 20, 80, 100]);
+  });
+
+  it('handles empty input', () => {
+    const prepared = prepareBrightnessConfig([]);
+    expect(prepared).toEqual([
+      { lightener: 0, target: 0 },
+      { lightener: 100, target: 100 },
+    ]);
+  });
+});
+
+describe('interpolateCurve', () => {
+  it('returns 101 values', () => {
+    const result = interpolateCurve([]);
+    expect(result).toHaveLength(101);
+  });
+
+  it('starts at 0', () => {
+    const result = interpolateCurve([]);
+    expect(result[0]).toBe(0);
+  });
+
+  it('linear 1:1 maps identity', () => {
+    const result = interpolateCurve([
+      { lightener: 0, target: 0 },
+      { lightener: 100, target: 100 },
+    ]);
+    // Every value should equal its index
+    for (let i = 0; i <= 100; i++) {
+      expect(result[i]).toBeCloseTo(i, 5);
+    }
+  });
+
+  it('handles flat segments', () => {
+    const result = interpolateCurve([
+      { lightener: 0, target: 0 },
+      { lightener: 50, target: 50 },
+      { lightener: 100, target: 50 },
+    ]);
+    // 50-100 range should all be 50
+    for (let i = 50; i <= 100; i++) {
+      expect(result[i]).toBeCloseTo(50, 5);
+    }
+  });
+
+  it('handles steep ramp', () => {
+    const result = interpolateCurve([
+      { lightener: 0, target: 0 },
+      { lightener: 10, target: 100 },
+      { lightener: 100, target: 100 },
+    ]);
+    expect(result[5]).toBeCloseTo(50, 0);
+    expect(result[10]).toBeCloseTo(100, 0);
+    expect(result[50]).toBeCloseTo(100, 0);
+  });
+
+  it('handles late-onset curve', () => {
+    const result = interpolateCurve([
+      { lightener: 0, target: 0 },
+      { lightener: 80, target: 0 },
+      { lightener: 100, target: 100 },
+    ]);
+    // 0-80 should be 0
+    for (let i = 0; i <= 80; i++) {
+      expect(result[i]).toBeCloseTo(0, 5);
+    }
+    // 90 should be roughly 50
+    expect(result[90]).toBeCloseTo(50, 0);
+  });
+});

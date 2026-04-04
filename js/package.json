@@ -8,7 +8,9 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/",
-    "format:check": "prettier --check src/"
+    "format:check": "prettier --check src/",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "lit": "^3.2.0"
@@ -23,7 +25,8 @@
     "rollup": "^4.24.0",
     "tslib": "^2.7.0",
     "typescript": "^5.5.0",
-    "typescript-eslint": "^8.0.0"
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.2"
   },
   "lint-staged": {
     "src/**/*.ts": [

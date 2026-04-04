@@ -23,7 +23,11 @@ def async_register_commands(hass: HomeAssistant) -> None:
 # Read access is intentionally not admin-gated: curve data is not sensitive,
 # and non-admin users need to see curves on their dashboards.
 @callback
-def ws_get_curves(hass, connection, msg):
+def ws_get_curves(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict,
+) -> None:
     """Return brightness curves for a Lightener entity."""
     entity_id = msg["entity_id"]
 
@@ -56,7 +60,11 @@ def ws_get_curves(hass, connection, msg):
     }
 )
 @websocket_api.async_response
-async def ws_save_curves(hass, connection, msg):
+async def ws_save_curves(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict,
+) -> None:
     """Save brightness curves for a Lightener entity."""
     entity_id = msg["entity_id"]
     curves = msg["curves"]

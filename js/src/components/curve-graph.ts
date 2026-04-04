@@ -96,27 +96,29 @@ export class CurveGraph extends LitElement {
       display: block;
       border-radius: 8px;
       touch-action: none;
-      background: var(--graph-bg, var(--card-background-color, #fafafa));
-      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+      background: var(--graph-bg, var(--card-background-color, var(--ha-card-background, #fafafa)));
+      border: 1px solid var(--divider, rgba(127, 127, 127, 0.2));
     }
     .grid-line {
-      stroke: var(--secondary-text, #9e9e9e);
+      stroke: var(--secondary-text, #616161);
       stroke-width: 0.5;
       opacity: 0.15;
     }
     .axis-line {
-      stroke: var(--secondary-text, #9e9e9e);
+      stroke: var(--secondary-text, #616161);
       stroke-width: 0.75;
       opacity: 0.4;
     }
     .axis-label {
-      fill: var(--secondary-text, #9e9e9e);
+      fill: var(--secondary-text, #616161);
       font-size: 10px;
+      font-weight: 500;
       font-family: inherit;
     }
     .tick-label {
-      fill: var(--secondary-text, #9e9e9e);
+      fill: var(--secondary-text, #616161);
       font-size: 10px;
+      font-weight: 500;
       font-family: inherit;
     }
     .curve-line {
@@ -151,13 +153,22 @@ export class CurveGraph extends LitElement {
       cursor: crosshair;
     }
     .hint {
-      fill: var(--secondary-text, #9e9e9e);
-      font-size: 7px;
+      fill: var(--secondary-text, #616161);
+      font-size: 11px;
       font-family: inherit;
-      opacity: 0.6;
+      opacity: 0.8;
+    }
+    .hint-select {
+      font-weight: 500;
+    }
+    .editing-label {
+      font-size: 10px;
+      font-family: inherit;
+      opacity: 0.7;
+      font-weight: 500;
     }
     .diagonal-ref {
-      stroke: var(--secondary-text, #9e9e9e);
+      stroke: var(--secondary-text, #616161);
       stroke-width: 0.75;
       opacity: 0.12;
       stroke-dasharray: 4 3;
@@ -172,13 +183,13 @@ export class CurveGraph extends LitElement {
       }
     }
     .tooltip-bg {
-      fill: var(--primary-text-color, #212121);
+      fill: var(--tooltip-background-color, var(--primary-text-color, #212121));
       rx: 3;
       ry: 3;
-      opacity: 0.85;
+      opacity: 0.9;
     }
     .tooltip-text {
-      fill: var(--card-background-color, #fff);
+      fill: var(--tooltip-text-color, var(--card-background-color, #fff));
       font-size: 9.5px;
       font-family: inherit;
     }
@@ -206,6 +217,8 @@ export class CurveGraph extends LitElement {
   }
 
   private _onPointerDown(e: PointerEvent, curveIdx: number, pointIdx: number): void {
+    // Only drag on primary button (left-click); ignore right-click so contextmenu works
+    if (e.button !== 0) return;
     if (!this._isCurveInteractive(curveIdx)) return;
 
     // The origin anchor (index 0) is not draggable
@@ -358,10 +371,10 @@ export class CurveGraph extends LitElement {
 
       <!-- Axis labels -->
       <text class="axis-label" text-anchor="middle"
-        x="${PAD_LEFT + GRAPH_W / 2}" y="${VB_H - 4}">Lightener %</text>
+        x="${PAD_LEFT + GRAPH_W / 2}" y="${VB_H - 4}">Group brightness</text>
       <text class="axis-label" text-anchor="middle"
         transform="rotate(-90, 10, ${PAD_TOP + GRAPH_H / 2})"
-        x="10" y="${PAD_TOP + GRAPH_H / 2}">Light %</text>
+        x="10" y="${PAD_TOP + GRAPH_H / 2}">Light brightness</text>
     `;
   }
 
@@ -406,51 +419,52 @@ export class CurveGraph extends LitElement {
   private _renderCurve(curve: LightCurve, curveIdx: number) {
     if (!curve.visible || !curve.controlPoints.length) return nothing;
 
-    const isSelected = this.selectedCurveId === null || curve.entityId === this.selectedCurveId;
-    const isInteractive = this._isCurveInteractive(curveIdx);
-    const showPoints = isInteractive && !this.readOnly;
+    try {
+      const isSelected = this.selectedCurveId === null || curve.entityId === this.selectedCurveId;
+      const isInteractive = this._isCurveInteractive(curveIdx);
+      const showPoints = isInteractive && !this.readOnly;
 
-    // Build smooth bezier path through the prepared control points
-    const prepared = curve.controlPoints.slice().sort((a, b) => a.lightener - b.lightener);
-    // Ensure 0:0 origin
-    if (!prepared.length || prepared[0].lightener !== 0) {
-      prepared.unshift({ lightener: 0, target: 0 });
-    }
-    // Ensure 100 endpoint
-    if (prepared[prepared.length - 1].lightener !== 100) {
-      prepared.push({ lightener: 100, target: 100 });
-    }
-    const pathPoints = prepared.map((cp) => ({
-      x: toSvgX(cp.lightener),
-      y: toSvgY(cp.target),
-    }));
-    const curvePath = buildSmoothPath(pathPoints);
+      // Build smooth bezier path through the prepared control points
+      const prepared = curve.controlPoints.slice().sort((a, b) => a.lightener - b.lightener);
+      // Ensure 0:0 origin
+      if (!prepared.length || prepared[0].lightener !== 0) {
+        prepared.unshift({ lightener: 0, target: 0 });
+      }
+      // Ensure 100 endpoint
+      if (prepared[prepared.length - 1].lightener !== 100) {
+        prepared.push({ lightener: 100, target: 100 });
+      }
+      const pathPoints = prepared.map((cp) => ({
+        x: toSvgX(cp.lightener),
+        y: toSvgY(cp.target),
+      }));
+      const curvePath = buildSmoothPath(pathPoints);
 
-    // Gradient fill path: close the curve to the x-axis
-    const fillPath =
-      curvePath +
-      ` L${toSvgX(prepared[prepared.length - 1].lightener)},${toSvgY(0)}` +
-      ` L${toSvgX(0)},${toSvgY(0)} Z`;
+      // Gradient fill path: close the curve to the x-axis
+      const fillPath =
+        curvePath +
+        ` L${toSvgX(prepared[prepared.length - 1].lightener)},${toSvgY(0)}` +
+        ` L${toSvgX(0)},${toSvgY(0)} Z`;
 
-    const gradientId = `grad-${curveIdx}`;
+      const gradientId = `grad-${curveIdx}`;
 
-    // Dash patterns for colorblind accessibility (cycle through 5 patterns)
-    const dashPatterns = ['', '8 4', '4 4', '12 4 4 4', '2 4'];
-    const dashArray = dashPatterns[curveIdx % dashPatterns.length];
+      // Dash patterns for colorblind accessibility (cycle through 5 patterns)
+      const dashPatterns = ['', '8 4', '4 4', '12 4 4 4', '2 4'];
+      const dashArray = dashPatterns[curveIdx % dashPatterns.length];
 
-    const isDraggingThisCurve = this._dragCurveIdx === curveIdx;
-    const fillColor = curve.color + '33'; // 20% opacity version
-    const lineOpacity = isSelected ? 1 : 0.35;
+      const isDraggingThisCurve = this._dragCurveIdx === curveIdx;
+      const fillColor = curve.color + '33'; // 20% opacity version
+      const lineOpacity = isSelected ? 1 : 0.35;
 
-    // Find hovered or dragged point for tooltip
-    let tooltipPoint: ControlPoint | null = null;
-    if (isDraggingThisCurve && this._dragPointIdx >= 0) {
-      tooltipPoint = curve.controlPoints[this._dragPointIdx];
-    } else if (this._hoveredPoint?.curve === curveIdx && showPoints) {
-      tooltipPoint = curve.controlPoints[this._hoveredPoint.point];
-    }
+      // Find hovered or dragged point for tooltip
+      let tooltipPoint: ControlPoint | null = null;
+      if (isDraggingThisCurve && this._dragPointIdx >= 0) {
+        tooltipPoint = curve.controlPoints[this._dragPointIdx];
+      } else if (this._hoveredPoint?.curve === curveIdx && showPoints) {
+        tooltipPoint = curve.controlPoints[this._hoveredPoint.point];
+      }
 
-    return svg`
+      return svg`
       <defs>
         <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.25 : 0.08}" />
@@ -511,6 +525,9 @@ export class CurveGraph extends LitElement {
       }
       ${tooltipPoint !== null ? this._renderTooltip(curve, tooltipPoint) : nothing}
     `;
+    } catch {
+      return nothing;
+    }
   }
 
   protected firstUpdated(_changedProperties: PropertyValues): void {
@@ -562,15 +579,23 @@ export class CurveGraph extends LitElement {
               : this.curves.map((c, i) => ({ curve: c, idx: i }));
           return order.map(({ curve, idx }) => this._renderCurve(curve, idx));
         })()}
-        ${!this.readOnly
-          ? this.selectedCurveId !== null
-            ? svg`<text class="hint" text-anchor="end"
+        ${(() => {
+          if (this.readOnly) return nothing;
+          if (this.selectedCurveId === null) {
+            return svg`<text class="hint hint-select" text-anchor="middle"
+                x="${PAD_LEFT + GRAPH_W / 2}" y="${PAD_TOP + GRAPH_H / 2}"
+                >Select a light below to start editing</text>`;
+          }
+          const selected = this.curves.find((c) => c.entityId === this.selectedCurveId);
+          return svg`
+              <text class="editing-label"
+                x="${PAD_LEFT + 6}" y="${PAD_TOP + 14}"
+                fill="${selected?.color ?? 'currentColor'}"
+                >Editing: ${selected?.friendlyName ?? ''}</text>
+              <text class="hint" text-anchor="end"
                 x="${PAD_LEFT + GRAPH_W}" y="${PAD_TOP + GRAPH_H + 28}"
-                >Double-tap to add · Long-press to remove</text>`
-            : svg`<text class="hint" text-anchor="end"
-                x="${PAD_LEFT + GRAPH_W}" y="${PAD_TOP + GRAPH_H + 28}"
-                >Select a light below to edit its curve</text>`
-          : nothing}
+                >Double-click to add · Right-click to remove</text>`;
+        })()}
       </svg>
     `;
   }

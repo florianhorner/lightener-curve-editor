@@ -23,8 +23,8 @@ export class CurveFooter extends LitElement {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 12px;
-      color: var(--secondary-text, #9e9e9e);
+      font-size: var(--text-sm, 12px);
+      color: var(--secondary-text, #616161);
       margin-right: auto;
     }
     .lock-icon {
@@ -33,13 +33,13 @@ export class CurveFooter extends LitElement {
       opacity: 0.6;
     }
     .unsaved-label {
-      font-size: 12px;
+      font-size: var(--text-sm, 12px);
       color: var(--warning-color, #ffa726);
       margin-right: auto;
     }
     button {
       font-family: inherit;
-      font-size: 13px;
+      font-size: var(--text-md, 13px);
       font-weight: 500;
       border: none;
       border-radius: 6px;
@@ -62,16 +62,20 @@ export class CurveFooter extends LitElement {
     }
     .btn-cancel {
       background: transparent;
-      color: var(--secondary-text, #727272);
-      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+      color: var(--secondary-text, #616161);
+      border: 1px solid var(--divider, rgba(127, 127, 127, 0.2));
     }
     .btn-cancel:hover:not(:disabled) {
       background: rgba(128, 128, 128, 0.1);
     }
     @media (max-width: 500px) {
+      .footer {
+        min-height: 48px;
+      }
       button {
-        padding: 10px 18px;
+        padding: 12px 20px;
         font-size: 14px;
+        min-height: 44px;
       }
     }
   `;

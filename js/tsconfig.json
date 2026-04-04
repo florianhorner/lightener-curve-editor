@@ -7,7 +7,7 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "declaration": false,
-    "sourceMap": false,
+    "sourceMap": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,

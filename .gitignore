@@ -22,3 +22,5 @@ coverage.xml
 config/*
 !config/configuration.yaml
 js/node_modules/
+.gstack/
+.context/

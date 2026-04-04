@@ -30,7 +30,8 @@ export class CurveLegend extends LitElement {
       transition:
         background 0.15s ease,
         opacity 0.2s ease;
-      font-size: 13px;
+      font-size: var(--text-md, 13px);
+      font-weight: 500;
       color: var(--primary-text-color, #212121);
     }
     .legend-item:hover {
@@ -47,8 +48,33 @@ export class CurveLegend extends LitElement {
     .color-dot {
       width: 10px;
       height: 10px;
-      border-radius: 50%;
       flex-shrink: 0;
+    }
+    .color-dot.shape-circle {
+      border-radius: 50%;
+    }
+    .color-dot.shape-square {
+      border-radius: 2px;
+    }
+    .color-dot.shape-diamond {
+      border-radius: 2px;
+      transform: rotate(45deg);
+      width: 9px;
+      height: 9px;
+    }
+    .color-dot.shape-triangle {
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 10px solid var(--dot-color);
+      background: transparent !important;
+    }
+    .color-dot.shape-bar {
+      border-radius: 2px;
+      width: 10px;
+      height: 6px;
+      margin: 2px 0;
     }
     .eye-icon {
       width: 16px;
@@ -70,16 +96,21 @@ export class CurveLegend extends LitElement {
     }
     @media (max-width: 500px) {
       .legend-item {
-        padding: 8px 10px;
+        padding: 10px 10px;
         font-size: 14px;
+        min-height: 44px;
+        box-sizing: border-box;
       }
       .eye-icon {
         width: 20px;
         height: 20px;
-        padding: 8px;
+        padding: 12px;
+        margin: -12px;
+        margin-left: auto;
+        box-sizing: content-box;
       }
       .legend {
-        max-height: 120px;
+        max-height: 160px;
       }
     }
   `;
@@ -105,11 +136,13 @@ export class CurveLegend extends LitElement {
     );
   }
 
+  private static readonly _shapes = ['circle', 'square', 'diamond', 'triangle', 'bar'] as const;
+
   render() {
     return html`
       <div class="legend" role="listbox" aria-label="Light curves">
         ${this.curves.map(
-          (curve) => html`
+          (curve, idx) => html`
             <div
               class="legend-item ${curve.visible ? '' : 'hidden'} ${this.selectedCurveId ===
               curve.entityId
@@ -123,7 +156,10 @@ export class CurveLegend extends LitElement {
                 ? `--selection-bg: ${curve.color}25; --selection-border: ${curve.color}`
                 : ''}"
             >
-              <span class="color-dot" style="background: ${curve.color}"></span>
+              <span
+                class="color-dot shape-${CurveLegend._shapes[idx % CurveLegend._shapes.length]}"
+                style="background: ${curve.color}; --dot-color: ${curve.color}"
+              ></span>
               <span class="name">${curve.friendlyName}</span>
               <svg
                 class="eye-icon"

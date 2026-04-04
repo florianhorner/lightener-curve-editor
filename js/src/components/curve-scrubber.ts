@@ -32,7 +32,7 @@ export class CurveScrubber extends LitElement {
       left: 0;
       right: 0;
       height: 2px;
-      background: var(--secondary-text, #9e9e9e);
+      background: var(--secondary-text, #616161);
       opacity: 0.3;
       border-radius: 1px;
     }
@@ -41,14 +41,14 @@ export class CurveScrubber extends LitElement {
       top: 6px;
       width: 1px;
       height: 12px;
-      background: var(--secondary-text, #9e9e9e);
+      background: var(--secondary-text, #616161);
       opacity: 0.2;
     }
     .tick-label {
       position: absolute;
       top: 20px;
       font-size: 8px;
-      color: var(--secondary-text, #9e9e9e);
+      color: var(--secondary-text, #616161);
       opacity: 0.5;
       transform: translateX(-50%);
       user-select: none;
@@ -59,12 +59,21 @@ export class CurveScrubber extends LitElement {
       width: 14px;
       height: 14px;
       background: var(--primary-color, #03a9f4);
-      border: 1.5px solid var(--card-background-color, #fff);
+      border: 1.5px solid var(--ha-card-background, var(--card-background-color, #fff));
       transform: translateX(-50%) rotate(45deg);
       cursor: grab;
       border-radius: 2px;
       transition: box-shadow 0.15s ease;
       z-index: 2;
+    }
+    /* Invisible larger touch target around diamond */
+    .diamond::after {
+      content: '';
+      position: absolute;
+      top: -14px;
+      left: -14px;
+      right: -14px;
+      bottom: -14px;
     }
     .diamond:hover {
       box-shadow: 0 0 8px var(--primary-color, #03a9f4);
@@ -114,7 +123,7 @@ export class CurveScrubber extends LitElement {
     }
     .bar-name {
       font-size: 8px;
-      color: var(--secondary-text, #9e9e9e);
+      color: var(--secondary-text, #616161);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -134,14 +143,24 @@ export class CurveScrubber extends LitElement {
       pointer-events: none;
     }
     @media (max-width: 500px) {
+      .track-area {
+        height: 36px;
+      }
+      .track-line {
+        top: 17px;
+      }
+      .tick {
+        top: 12px;
+      }
+      .tick-label {
+        top: 30px;
+        font-size: 10px;
+      }
       .bar-name {
         font-size: 11px;
       }
       .bar-value {
         font-size: 12px;
-      }
-      .tick-label {
-        font-size: 10px;
       }
       .position-label {
         font-size: 11px;
@@ -149,7 +168,7 @@ export class CurveScrubber extends LitElement {
       .diamond {
         width: 18px;
         height: 18px;
-        top: 2px;
+        top: 8px;
       }
     }
   `;
@@ -197,6 +216,24 @@ export class CurveScrubber extends LitElement {
     this._updatePositionFromClient(e.clientX);
   }
 
+  private _onKeyDown(e: KeyboardEvent): void {
+    if (this.readOnly) return;
+    const step = e.shiftKey ? 10 : 1;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      this._position = Math.min(100, this._position + step);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      this._position = Math.max(0, this._position - step);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      this._position = 0;
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      this._position = 100;
+    }
+  }
+
   private _updatePosition(e: PointerEvent): void {
     this._updatePositionFromClient(e.clientX);
   }
@@ -225,12 +262,14 @@ export class CurveScrubber extends LitElement {
         <div
           class="track-area"
           role="slider"
+          tabindex="0"
           aria-label="Brightness scrubber"
           aria-valuemin="0"
           aria-valuemax="100"
           aria-valuenow=${pos}
           aria-valuetext="${pos}% brightness"
           @click=${this._onTrackClick}
+          @keydown=${this._onKeyDown}
         >
           <div class="track-line"></div>
           <div class="position-label" style="left: ${this._position}%">${pos}%</div>
