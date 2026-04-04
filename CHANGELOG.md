@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.9.0-dev.1] - 2026-04-04
+
+### Added
+
+- Colorblind-safe curve palette: replaced green colors with indigo and brown
+- Shape markers in legend (circle, square, diamond, triangle, bar) for color-independent identification
+- Loading indicator with pulse animation while curves are being fetched
+- "Editing: {name}" label in graph header showing which curve is selected
+- Retry links on load and save errors ("Tap to retry")
+- Keyboard support for scrubber slider (arrow keys, Shift+arrow, Home/End)
+- CSS type scale custom properties (--text-xs/sm/md/lg) for consistent typography
+- Synced side-by-side light/dark demo cards in dev.html
+
+### Fixed
+
+- Right-click to remove control points now works (pointerdown was intercepting right-click button)
+- Success status now uses blue (#2563EB) with checkmark icon instead of green (colorblind-safe)
+- Error messages now include warning triangle icon for visual distinction from success
+- Hint text contrast bumped from 0.6 to 0.8 opacity for WCAG AA compliance
+- Selection hint centered in graph area instead of hidden in bottom corner
+
 ## [2.8.1] - 2026-04-04
 
 ### Fixed

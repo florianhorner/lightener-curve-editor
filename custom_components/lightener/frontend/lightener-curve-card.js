@@ -455,7 +455,10 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
               title="${t.friendlyName}"
               style="${this.selectedCurveId===t.entityId?`--selection-bg: ${t.color}25; --selection-border: ${t.color}`:""}"
             >
-              <span class="color-dot shape-${It._shapes[e%It._shapes.length]}" style="background: ${t.color}; --dot-color: ${t.color}"></span>
+              <span
+                class="color-dot shape-${It._shapes[e%It._shapes.length]}"
+                style="background: ${t.color}; --dot-color: ${t.color}"
+              ></span>
               <span class="name">${t.friendlyName}</span>
               <svg
                 class="eye-icon"
@@ -700,8 +703,18 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
         min-height: 44px;
       }
     }
-  `,t([gt({type:Boolean})],Ot.prototype,"dirty",void 0),t([gt({type:Boolean})],Ot.prototype,"readOnly",void 0),t([gt({type:Boolean})],Ot.prototype,"saving",void 0),Ot=t([ht("curve-footer")],Ot);const Ut=V`<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+  `,t([gt({type:Boolean})],Ot.prototype,"dirty",void 0),t([gt({type:Boolean})],Ot.prototype,"readOnly",void 0),t([gt({type:Boolean})],Ot.prototype,"saving",void 0),Ot=t([ht("curve-footer")],Ot);const Ut=V`<svg
+  class="status-icon"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path
+    d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+  ></path>
   <line x1="12" y1="9" x2="12" y2="13"></line>
   <line x1="12" y1="17" x2="12.01" y2="17"></line>
 </svg>`,Dt=["#42a5f5","#ef5350","#5c6bc0","#ffa726","#ab47bc","#26c6da","#ec407a","#8d6e63","#ffca28","#7e57c2"];let Tt=class extends dt{constructor(){super(...arguments),this._curves=[],this._originalCurves=[],this._config={},this._selectedCurveId=null,this._saving=!1,this._loadError=null,this._saveError=null,this._saveSuccess=!1,this._loading=!1,this._hass=null,this._loaded=!1,this._loadedEntityId=void 0,this._boundKeyHandler=null,this._boundBeforeUnload=null,this._saveSuccessTimer=null}setConfig(t){this._config=t,this._tryLoadCurves()}set hass(t){this._hass=t,this._tryLoadCurves()}getCardSize(){return 4}get _isAdmin(){return this._hass?.user?.is_admin??!1}get _entityId(){return this._config.entity}get _isDirty(){return!function(t,e){if(t.length!==e.length)return!1;for(let i=0;i<t.length;i++){const r=t[i].controlPoints,s=e[i].controlPoints;if(r.length!==s.length)return!1;for(let t=0;t<r.length;t++){if(r[t].lightener!==s[t].lightener)return!1;if(r[t].target!==s[t].target)return!1}}return!0}(this._curves,this._originalCurves)}connectedCallback(){super.connectedCallback(),this._loaded=!1,this._loadedEntityId=void 0,this._tryLoadCurves(),this._boundKeyHandler=this._onKeyDown.bind(this),this._boundBeforeUnload=this._onBeforeUnload.bind(this),window.addEventListener("keydown",this._boundKeyHandler),window.addEventListener("beforeunload",this._boundBeforeUnload)}disconnectedCallback(){super.disconnectedCallback(),this._boundKeyHandler&&window.removeEventListener("keydown",this._boundKeyHandler),this._boundBeforeUnload&&window.removeEventListener("beforeunload",this._boundBeforeUnload),this._saveSuccessTimer&&(clearTimeout(this._saveSuccessTimer),this._saveSuccessTimer=null)}_onKeyDown(t){(t.ctrlKey||t.metaKey)&&"s"===t.key&&this._isDirty&&this._isAdmin&&!this._saving&&(t.preventDefault(),this._onSave()),"Escape"===t.key&&this._isDirty&&!this._saving&&(t.preventDefault(),this._onCancel())}_onBeforeUnload(t){this._isDirty&&t.preventDefault()}async _tryLoadCurves(){if(!(this._loaded&&this._loadedEntityId===this._entityId||this._loading))if(this._hass&&this._entityId){this._loadError=null,this._loading=!0;try{const r=await this._hass.callWS({type:"lightener/get_curves",entity_id:this._entityId}),s=(t=r.entities,e=this._hass.states,i=Dt,Object.keys(t).map((r,s)=>{const o=t[r]?.brightness??{},n=[{lightener:0,target:0}];for(const[t,e]of Object.entries(o)){const i=Number(t),r=Number(e);Number.isFinite(i)&&Number.isFinite(r)&&n.push({lightener:i,target:r})}n.sort((t,e)=>t.lightener-e.lightener);const a=e[r]?.attributes?.friendly_name??r.replace("light.","");return{entityId:r,friendlyName:a,controlPoints:n,visible:!0,color:i[s%i.length]}}));this._curves=s,this._originalCurves=ft(s),this._loaded=!0,this._loadedEntityId=this._entityId}catch(t){console.error("[Lightener] Failed to load curves:",t),this._loadError=String(t)}finally{this._loading=!1}var t,e,i}else if(0===this._curves.length){const t=[{entityId:"light.ceiling_light",friendlyName:"Ceiling Light",controlPoints:[{lightener:0,target:0},{lightener:20,target:0},{lightener:60,target:80},{lightener:100,target:100}],visible:!0,color:Dt[0]},{entityId:"light.sofa_lamp",friendlyName:"Sofa Lamp",controlPoints:[{lightener:0,target:0},{lightener:10,target:50},{lightener:40,target:100},{lightener:70,target:100},{lightener:100,target:60}],visible:!0,color:Dt[1]},{entityId:"light.led_strip",friendlyName:"LED Strip",controlPoints:[{lightener:0,target:0},{lightener:1,target:1},{lightener:100,target:100}],visible:!0,color:Dt[2]}];this._curves=t,this._originalCurves=ft(t)}}_onSelectCurve(t){const{entityId:e}=t.detail,i=this._curves.find(t=>t.entityId===e);i&&!i.visible||(this._selectedCurveId=this._selectedCurveId===e?null:e)}_onPointMove(t){const{curveIndex:e,pointIndex:i,lightener:r,target:s}=t.detail,o=[...this._curves],n={...o[e]},a=[...n.controlPoints];a[i]={lightener:r,target:s},n.controlPoints=a,o[e]=n,this._curves=o}_onPointDrop(t){}_onPointAdd(t){const{lightener:e,target:i,entityId:r}=t.detail,s=r??this._selectedCurveId;if(!s)return;const o=this._curves.findIndex(t=>t.entityId===s);if(o<0)return;if(this._curves[o].controlPoints.some(t=>t.lightener===e))return;const n=[...this._curves],a={...n[o]},l=[...a.controlPoints,{lightener:e,target:i}];l.sort((t,e)=>t.lightener-e.lightener),a.controlPoints=l,n[o]=a,this._curves=n}_onPointRemove(t){const{curveIndex:e,pointIndex:i}=t.detail,r=this._curves[e];if(!r)return;if(r.controlPoints.length<=2)return;const s=[...this._curves],o={...s[e]};o.controlPoints=o.controlPoints.filter((t,e)=>e!==i),s[e]=o,this._curves=s}_onToggleCurve(t){const{entityId:e}=t.detail,i=this._curves.map(t=>t.entityId===e?{...t,visible:!t.visible}:t);if(this._curves=i,this._selectedCurveId===e){const t=i.find(t=>t.entityId===e);t&&!t.visible&&(this._selectedCurveId=null)}}async _onSave(){if(this._hass&&this._entityId&&!this._saving){this._saving=!0,this._saveError=null;try{const t=function(t){const e={};for(const i of t){const t={};for(const e of i.controlPoints)0!==e.lightener&&(t[String(e.lightener)]=String(e.target));e[i.entityId]={brightness:t}}return e}(this._curves);await this._hass.callWS({type:"lightener/save_curves",entity_id:this._entityId,curves:t}),this._originalCurves=ft(this._curves),this._loaded=!1,this._tryLoadCurves(),this._saveSuccess=!0,this._saveSuccessTimer=setTimeout(()=>{this._saveSuccess=!1,this._saveSuccessTimer=null},2e3)}catch(t){console.error("[Lightener] Failed to save curves:",t),this._saveError="Save failed. Check connection."}finally{this._saving=!1}}}_retryLoad(){this._loaded=!1,this._loadError=null,this._tryLoadCurves()}_onCancel(){this._curves=ft(this._originalCurves),this._selectedCurveId=null}render(){return V`
@@ -753,19 +766,25 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
         ></curve-footer>
 
         ${this._saveSuccess?V`<div class="success">
-              <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                class="status-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
               Saved successfully
             </div>`:F}
         ${this._loadError?V`<div class="error">
-              ${Ut}
-              Failed to load curves
+              ${Ut} Failed to load curves
               <span class="retry-link" @click=${this._retryLoad}>Tap to retry</span>
             </div>`:F}
         ${this._saveError?V`<div class="error">
-              ${Ut}
-              Save failed
+              ${Ut} Save failed
               <span class="retry-link" @click=${this._onSave}>Tap to retry</span>
             </div>`:F}
       </div>
@@ -861,8 +880,13 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
       animation: pulse 1.5s ease-in-out infinite;
     }
     @keyframes pulse {
-      0%, 100% { opacity: 0.5; }
-      50% { opacity: 1; }
+      0%,
+      100% {
+        opacity: 0.5;
+      }
+      50% {
+        opacity: 1;
+      }
     }
     @keyframes fade-in {
       from {
