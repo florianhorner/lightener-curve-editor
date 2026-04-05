@@ -101,9 +101,11 @@ export class CurveScrubber extends LitElement {
     }
     .value-badges {
       display: flex;
-      gap: 6px;
+      gap: 4px 6px;
       margin-top: 10px;
       flex-wrap: wrap;
+      max-height: 46px;
+      overflow: hidden;
     }
     .badge {
       display: flex;
@@ -115,6 +117,8 @@ export class CurveScrubber extends LitElement {
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       background: rgba(128, 128, 128, 0.06);
+      white-space: nowrap;
+      min-width: 0;
     }
     .badge-dot {
       width: 6px;
@@ -126,6 +130,9 @@ export class CurveScrubber extends LitElement {
       font-weight: 400;
       opacity: 0.5;
       margin-left: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 80px;
     }
     @media (max-width: 500px) {
       .track-area {
