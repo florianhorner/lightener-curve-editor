@@ -17,6 +17,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["rollup.config.mjs", "dist/"],
+    ignores: ["rollup.config.mjs", "dist/", "**/*.test.ts"],
   }
 );

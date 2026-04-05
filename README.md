@@ -8,6 +8,10 @@
 
 Lightener is a Home Assistant integration used to create virtual lights that can control a group of lights. It offers the added benefit of controlling the state (on/off) and brightness level of each light independently.
 
+**[Try the live demo](https://florianhorner.github.io/lightener-curve-editor/)** — fully interactive, no install needed.
+
+> See it in action: **[Live Demo](https://florianhorner.github.io/lightener-curve-editor/)** — try the interactive curve editor with light/dark theme toggle, no install needed.
+
 ## What This Fork Adds
 
 ### Curve Editor Card (`custom:lightener-curve-card`)
@@ -15,12 +19,14 @@ Lightener is a Home Assistant integration used to create virtual lights that can
 A visual editor for per-light brightness curves, directly in your HA dashboard — no more typing number pairs by hand.
 
 - **Drag control points** on smooth bezier curves to shape each light's response
-- **Double-tap to add** a point, **long-press to remove** one
-- **Brightness scrubber** shows real-time bar gauges for each light at any Lightener level
-- **Colorblind-accessible** dash patterns distinguish overlapping curves
-- **Keyboard shortcuts**: Ctrl+S to save, Esc to cancel, with an unsaved-changes guard
+- **Double-click to add** a point, **right-click to remove** one
+- **Brightness scrubber** with gradient track and inline value badges for each light
+- **Colorblind-accessible**: dash patterns + shape markers (circle, square, diamond, triangle, bar) distinguish curves without relying on color alone
+- **Keyboard navigation**: arrow keys on the scrubber, Enter/Space on legend items, Ctrl+S to save, Esc to cancel
+- **Layered panel design**: graph, scrubber, and legend each sit in their own tinted sub-panel
 - **Theme-aware**: adapts to both HA light and dark modes
-- **Mobile-friendly**: touch-optimised controls with responsive layout
+- **Scales from 2 to 20+ lights**: badges cap at 2 rows, legend scrolls, long names truncate
+- **Mobile-friendly**: touch-optimised controls with 44px touch targets
 - **Admin-only editing**: non-admin users see curves in read-only mode
 
 ### WebSocket API

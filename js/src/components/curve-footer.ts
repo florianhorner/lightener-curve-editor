@@ -16,15 +16,15 @@ export class CurveFooter extends LitElement {
       align-items: center;
       justify-content: flex-end;
       gap: 8px;
-      padding: 8px 0 0;
+      padding: 14px 0 0;
       min-height: 36px;
     }
     .read-only {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 12px;
-      color: var(--secondary-text, #9e9e9e);
+      font-size: var(--text-sm, 12px);
+      color: var(--secondary-text, #616161);
       margin-right: auto;
     }
     .lock-icon {
@@ -33,17 +33,18 @@ export class CurveFooter extends LitElement {
       opacity: 0.6;
     }
     .unsaved-label {
-      font-size: 12px;
-      color: var(--warning-color, #ffa726);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--warning-color, #f59e0b);
       margin-right: auto;
     }
     button {
       font-family: inherit;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       border: none;
-      border-radius: 6px;
-      padding: 6px 16px;
+      border-radius: 8px;
+      padding: 7px 16px;
       cursor: pointer;
       transition:
         background 0.15s ease,
@@ -54,24 +55,28 @@ export class CurveFooter extends LitElement {
       cursor: default;
     }
     .btn-save {
-      background: var(--primary-color, #03a9f4);
+      background: #2563eb;
       color: #fff;
     }
     .btn-save:hover:not(:disabled) {
-      opacity: 0.9;
+      background: #1d4fd8;
     }
     .btn-cancel {
       background: transparent;
-      color: var(--secondary-text, #727272);
-      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+      color: var(--secondary-text, #616161);
+      border: 1px solid var(--divider, rgba(127, 127, 127, 0.2));
     }
     .btn-cancel:hover:not(:disabled) {
-      background: rgba(128, 128, 128, 0.1);
+      background: rgba(128, 128, 128, 0.08);
     }
     @media (max-width: 500px) {
+      .footer {
+        min-height: 48px;
+      }
       button {
-        padding: 10px 18px;
+        padding: 12px 20px;
         font-size: 14px;
+        min-height: 44px;
       }
     }
   `;

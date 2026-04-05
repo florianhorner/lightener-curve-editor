@@ -9,15 +9,31 @@ import './components/curve-footer.js';
 
 const SAVE_SUCCESS_DISPLAY_MS = 2000;
 
+const WARNING_ICON = html`<svg
+  class="status-icon"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path
+    d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+  ></path>
+  <line x1="12" y1="9" x2="12" y2="13"></line>
+  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+</svg>`;
+
 const CURVE_COLORS = [
   '#42a5f5',
   '#ef5350',
-  '#66bb6a',
+  '#5c6bc0',
   '#ffa726',
   '#ab47bc',
   '#26c6da',
   '#ec407a',
-  '#9ccc65',
+  '#8d6e63',
   '#ffca28',
   '#7e57c2',
 ];
@@ -73,10 +89,10 @@ export class LightenerCurveCard extends LitElement {
   @state() private _loadError: string | null = null;
   @state() private _saveError: string | null = null;
   @state() private _saveSuccess = false;
+  @state() private _loading = false;
 
   @state() private _hass: Hass | null = null;
   private _loaded = false;
-  private _loading = false;
   private _loadedEntityId: string | undefined = undefined;
   private _boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _boundBeforeUnload: ((e: BeforeUnloadEvent) => void) | null = null;
@@ -86,58 +102,110 @@ export class LightenerCurveCard extends LitElement {
     :host {
       --card-bg: var(--ha-card-background, var(--card-background-color, #fff));
       --text-color: var(--primary-text-color, #212121);
-      --secondary-text: var(--secondary-text-color, #727272);
-      --divider: var(--divider-color, rgba(0, 0, 0, 0.12));
+      --secondary-text: var(--secondary-text-color, #616161);
+      --divider: var(--divider-color, rgba(127, 127, 127, 0.2));
       --graph-bg: var(--card-background-color, var(--ha-card-background, #fafafa));
+      --panel-bg: color-mix(in srgb, var(--card-bg) 95%, var(--secondary-text, #616161) 5%);
+      --text-xs: 9px;
+      --text-sm: 12px;
+      --text-md: 13px;
+      --text-lg: 14px;
 
       display: block;
       font-family: var(--paper-font-body1_-_font-family, 'Roboto', sans-serif);
     }
     .card {
       background: var(--card-bg);
-      border-radius: var(--ha-card-border-radius, 12px);
-      box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0, 0, 0, 0.15));
-      padding: 16px;
+      border-radius: var(--ha-card-border-radius, 16px);
+      box-shadow: var(
+        --ha-card-box-shadow,
+        0 1px 3px rgba(0, 0, 0, 0.08),
+        0 8px 24px rgba(0, 0, 0, 0.06)
+      );
+      padding: 20px;
       color: var(--text-color);
     }
     .header {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
     .header-icon {
-      width: 20px;
-      height: 20px;
-      opacity: 0.7;
+      width: 18px;
+      height: 18px;
+      opacity: 0.5;
     }
     h2 {
       margin: 0;
-      font-size: 16px;
-      font-weight: 500;
-      letter-spacing: 0.01em;
+      font-size: var(--text-lg);
+      font-weight: 600;
+      letter-spacing: -0.01em;
     }
-    .graph-container {
-      border-radius: 8px;
+    .graph-panel {
+      border-radius: 12px;
+      padding: 12px;
+      background: var(--panel-bg);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
       overflow: hidden;
-    }
-    .divider {
-      height: 1px;
-      background: var(--divider);
-      margin: 12px 0 4px;
+      margin-bottom: 12px;
     }
     .error {
-      font-size: 12px;
+      font-size: var(--text-sm);
       color: var(--error-color, #db4437);
       padding: 8px 0 0;
       text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .error .retry-link {
+      cursor: pointer;
+      text-decoration: underline;
+      opacity: 0.8;
+      background: none;
+      border: none;
+      font: inherit;
+      color: inherit;
+      padding: 0;
+    }
+    .error .retry-link:hover {
+      opacity: 1;
     }
     .success {
-      font-size: 12px;
-      color: var(--success-color, #43a047);
+      font-size: var(--text-sm);
+      color: #2563eb;
       padding: 8px 0 0;
       text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       animation: fade-in 0.2s ease;
+    }
+    .status-icon {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+    .loading-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 0;
+      font-size: var(--text-sm);
+      color: var(--secondary-text);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,
+      100% {
+        opacity: 0.5;
+      }
+      50% {
+        opacity: 1;
+      }
     }
     @keyframes fade-in {
       from {
@@ -377,6 +445,12 @@ export class LightenerCurveCard extends LitElement {
     }
   }
 
+  private _retryLoad(): void {
+    this._loaded = false;
+    this._loadError = null;
+    this._tryLoadCurves();
+  }
+
   private _onCancel(): void {
     this._curves = cloneCurves(this._originalCurves);
     this._selectedCurveId = null;
@@ -400,21 +474,23 @@ export class LightenerCurveCard extends LitElement {
           <h2>Brightness Curves</h2>
         </div>
 
-        <div class="graph-container">
-          <curve-graph
-            .curves=${this._curves}
-            .selectedCurveId=${this._selectedCurveId}
-            .readOnly=${!this._isAdmin}
-            @point-move=${this._onPointMove}
-            @point-drop=${this._onPointDrop}
-            @point-add=${this._onPointAdd}
-            @point-remove=${this._onPointRemove}
-          ></curve-graph>
-        </div>
+        ${this._loading
+          ? html`<div class="loading-indicator" role="status" aria-live="polite">
+              Loading curves...
+            </div>`
+          : html`<div class="graph-panel">
+              <curve-graph
+                .curves=${this._curves}
+                .selectedCurveId=${this._selectedCurveId}
+                .readOnly=${!this._isAdmin}
+                @point-move=${this._onPointMove}
+                @point-drop=${this._onPointDrop}
+                @point-add=${this._onPointAdd}
+                @point-remove=${this._onPointRemove}
+              ></curve-graph>
+            </div>`}
 
         <curve-scrubber .curves=${this._curves} .readOnly=${!this._isAdmin}></curve-scrubber>
-
-        <div class="divider"></div>
 
         <curve-legend
           .curves=${this._curves}
@@ -431,9 +507,36 @@ export class LightenerCurveCard extends LitElement {
           @cancel-curves=${this._onCancel}
         ></curve-footer>
 
-        ${this._saveSuccess ? html`<div class="success">Saved successfully</div>` : nothing}
-        ${this._loadError ? html`<div class="error">Failed to load curves</div>` : nothing}
-        ${this._saveError ? html`<div class="error">${this._saveError}</div>` : nothing}
+        ${this._saveSuccess
+          ? html`<div class="success" role="status" aria-live="polite">
+              <svg
+                class="status-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Saved successfully
+            </div>`
+          : nothing}
+        ${this._loadError
+          ? html`<div class="error" role="alert">
+              ${WARNING_ICON} Failed to load curves
+              <button type="button" class="retry-link" @click=${this._retryLoad}>
+                Tap to retry
+              </button>
+            </div>`
+          : nothing}
+        ${this._saveError
+          ? html`<div class="error" role="alert">
+              ${WARNING_ICON} Save failed
+              <button type="button" class="retry-link" @click=${this._onSave}>Tap to retry</button>
+            </div>`
+          : nothing}
       </div>
     `;
   }
