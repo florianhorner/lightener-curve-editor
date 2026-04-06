@@ -789,9 +789,7 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
             </div>`:F}
         ${this._saveError?V`<div class="error" role="alert">
               ${Dt} Save failed
-              <button type="button" class="retry-link" @click=${this._onSave}>
-                Tap to retry
-              </button>
+              <button type="button" class="retry-link" @click=${this._onSave}>Tap to retry</button>
             </div>`:F}
       </div>
     `}};Tt.styles=n`
