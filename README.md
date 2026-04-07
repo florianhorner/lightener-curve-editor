@@ -19,12 +19,15 @@ A visual editor for per-light brightness curves, directly in your HA dashboard �
 - **Drag control points** on smooth bezier curves to shape each light's response
 - **Double-click to add** a point, **right-click to remove** one
 - **Brightness scrubber** with gradient track and inline value badges for each light
+- **Scrubber + graph sync**: moving the scrubber shows a vertical indicator and per-curve dots directly on the graph
 - **Colorblind-accessible**: dash patterns + shape markers (circle, square, diamond, triangle, bar) distinguish curves without relying on color alone
-- **Keyboard navigation**: arrow keys on the scrubber, Enter/Space on legend items, Ctrl+S to save, Esc to cancel
+- **Keyboard navigation**: arrow keys on the scrubber, Enter/Space on legend items, Ctrl+S to save, Ctrl/Cmd+Z to undo, Esc to cancel
 - **Layered panel design**: graph, scrubber, and legend each sit in their own tinted sub-panel
 - **Theme-aware**: adapts to both HA light and dark modes
-- **Scales from 2 to 20+ lights**: badges cap at 2 rows, legend scrolls, long names truncate
+- **Scales from 2 to 20+ lights**: badges cap at 2 rows and long names truncate cleanly
 - **Mobile-friendly**: touch-optimised controls with 44px touch targets
+- **Mobile long-press delete**: remove a control point by long-pressing it on touch devices
+- **Visual card editor**: Home Assistant card config UI with entity picker and optional title field
 - **Admin-only editing**: non-admin users see curves in read-only mode
 
 ### WebSocket API
@@ -55,6 +58,14 @@ Remove `florianhorner/lightener-curve-editor` from HACS custom repositories and 
 type: custom:lightener-curve-card
 entity: light.your_lightener_device
 ```
+
+## Documentation
+
+- [CHANGELOG.md](CHANGELOG.md) — release history
+- [CONTRIBUTING.md](CONTRIBUTING.md) — local setup, tooling, and workflow
+- [SECURITY.md](SECURITY.md) — vulnerability reporting policy
+- [CLAUDE.md](CLAUDE.md) — repository notes for AI-assisted contributors
+- [TODOS.md](TODOS.md) — tracked follow-up work
 
 ## Example Use Case
 
