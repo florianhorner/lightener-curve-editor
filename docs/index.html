@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -18,7 +18,7 @@
         margin: 0;
         padding: 0;
         background: #0a0a0f;
-        font-family: "Roboto", "Segoe UI", sans-serif;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
         color: #ccc;
         min-height: 100vh;
         overflow-x: hidden;
@@ -81,31 +81,45 @@
       }
       .demo-header h1 {
         font-size: 32px;
-        font-weight: 600;
+        font-family: "Manrope", "IBM Plex Sans", sans-serif;
+        font-weight: 700;
         color: #fff;
         margin: 0 0 10px;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.03em;
+        text-wrap: balance;
       }
       .demo-header h1 span {
-        background: linear-gradient(135deg, #42a5f5, #7c4dff);
+        background: linear-gradient(120deg, #42a5f5, #00bcd4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
       }
       .demo-header p {
-        font-size: 15px;
-        color: #777;
+        font-size: 16px;
+        color: #8d8d97;
         margin: 0;
         line-height: 1.6;
+        text-wrap: pretty;
       }
       .demo-header a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        padding: 0 10px;
+        margin: -10px;
         color: #64b5f6;
         text-decoration: none;
         border-bottom: 1px solid rgba(100, 181, 246, 0.3);
-        transition: border-color 0.2s;
+        border-radius: 8px;
+        transition: border-color 0.2s, background-color 0.2s;
       }
       .demo-header a:hover {
         border-color: #64b5f6;
+        background: rgba(100, 181, 246, 0.08);
+      }
+      .demo-header a:focus-visible {
+        outline: 2px solid #42a5f5;
+        outline-offset: 2px;
       }
 
       /* Hint pills */
@@ -117,11 +131,11 @@
         flex-wrap: wrap;
       }
       .hint-pill {
-        font-size: 11px;
-        color: #999;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        padding: 5px 12px;
+        font-size: 12px;
+        color: #b8bcc6;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        padding: 8px 12px;
         border-radius: 20px;
         white-space: nowrap;
         transition: background 0.2s, color 0.2s;
@@ -239,22 +253,39 @@
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        font-size: 13px;
+        min-height: 44px;
+        font-size: 14px;
         color: #555;
         text-decoration: none;
-        padding: 8px 16px;
+        padding: 10px 16px;
         border-radius: 8px;
         border: 1px solid rgba(255, 255, 255, 0.06);
-        transition: color 0.2s, border-color 0.2s;
+        transition: color 0.2s, border-color 0.2s, background-color 0.2s;
       }
       .demo-footer a:hover {
         color: #999;
         border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .demo-footer a:focus-visible {
+        outline: 2px solid #42a5f5;
+        outline-offset: 2px;
       }
       .demo-footer svg {
         width: 16px;
         height: 16px;
         fill: currentColor;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 1ms !important;
+          scroll-behavior: auto !important;
+        }
       }
 
       @media (max-width: 860px) {
@@ -290,6 +321,7 @@
           <span class="hint-pill">Double-click to add</span>
           <span class="hint-pill">Right-click to remove</span>
           <span class="hint-pill"><kbd>Ctrl+S</kbd> Save</span>
+          <span class="hint-pill"><kbd>Ctrl+Z</kbd> Undo</span>
           <span class="hint-pill"><kbd>Esc</kbd> Cancel</span>
         </div>
       </div>
