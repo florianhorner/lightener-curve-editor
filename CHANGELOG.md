@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Visual card configuration editor (`lightener-curve-card-editor`) with Lightener entity picker and optional custom title
+- Undo support for curve edits (footer undo button and Ctrl/Cmd+Z shortcut)
+- Shared graph math module (`graph-math.ts`) with geometry/interpolation helpers reused by graph and scrubber
+- 44 new Vitest unit tests (`card-logic.test.ts` and `graph-math.test.ts`) covering undo flow, interaction guards, and curve math
+- Release workflow zip validation step that fails when a nested `custom_components/` path is present or `manifest.json` is missing at zip root
+
+### Changed
+
+- Scrubber now emits position events and stays in sync with the graph, including a vertical guide and per-curve value dots
+- Curve legend shape markers now use shared constants from graph math utilities for consistent rendering
+- Graph and scrubber now sample values through the same smooth-curve interpolation path for consistent badge and graph readouts
+
+### Fixed
+
+- Removed a duplicated interpolation code path so graph and scrubber value sampling no longer drift from each other
+- Mobile editing behavior now supports long-press point removal while preserving drag interactions
+
 ## [2.9.0] - 2026-04-06
 
 ### Added
