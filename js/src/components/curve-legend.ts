@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { LightCurve } from '../utils/types.js';
+import { LEGEND_SHAPES } from '../utils/graph-math.js';
 
 @customElement('curve-legend')
 export class CurveLegend extends LitElement {
@@ -24,8 +25,6 @@ export class CurveLegend extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 2px;
-      max-height: 140px;
-      overflow-y: auto;
     }
     .legend-item {
       display: flex;
@@ -124,9 +123,6 @@ export class CurveLegend extends LitElement {
         margin-left: auto;
         box-sizing: content-box;
       }
-      .legend {
-        max-height: 160px;
-      }
     }
   `;
 
@@ -172,7 +168,7 @@ export class CurveLegend extends LitElement {
     }
   }
 
-  private static readonly _shapes = ['circle', 'square', 'diamond', 'triangle', 'bar'] as const;
+  private static readonly _shapes = LEGEND_SHAPES;
 
   render() {
     return html`

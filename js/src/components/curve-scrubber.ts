@@ -1,7 +1,8 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { LightCurve } from '../utils/types.js';
-import { interpolateCurve } from '../utils/interpolation.js';
+import { prepareBrightnessConfig } from '../utils/interpolation.js';
+import { PAD_LEFT, PAD_RIGHT, VB_W, sampleSmoothCurveAt } from '../utils/graph-math.js';
 
 @customElement('curve-scrubber')
 export class CurveScrubber extends LitElement {
@@ -18,8 +19,8 @@ export class CurveScrubber extends LitElement {
     }
     .scrubber-panel {
       border-radius: 12px;
-      padding: 14px 16px 12px;
-      margin-bottom: 12px;
+      padding: 14px 12px 12px;
+      margin-bottom: 8px;
       background: color-mix(
         in srgb,
         var(--ha-card-background, var(--card-background-color, #fff)) 95%,
@@ -40,6 +41,10 @@ export class CurveScrubber extends LitElement {
       height: 28px;
       cursor: pointer;
       touch-action: none;
+      /* Align with graph plot area: scrubber panel now has same 12px side
+         padding as graph panel, so % margins match the SVG axis padding. */
+      margin-left: ${(PAD_LEFT / VB_W) * 100}%;
+      margin-right: ${(PAD_RIGHT / VB_W) * 100}%;
     }
     .track-bg {
       position: absolute;
@@ -48,7 +53,7 @@ export class CurveScrubber extends LitElement {
       right: 0;
       height: 4px;
       border-radius: 2px;
-      background: var(--divider-color, rgba(127, 127, 127, 0.15));
+      background: rgba(37, 99, 235, 0.25);
     }
     .track-fill {
       position: absolute;
@@ -56,7 +61,7 @@ export class CurveScrubber extends LitElement {
       left: 0;
       height: 4px;
       border-radius: 2px;
-      background: linear-gradient(90deg, rgba(37, 99, 235, 0.15), #2563eb);
+      background: linear-gradient(90deg, rgba(37, 99, 235, 0.25), #2563eb);
       transition: width 0.05s linear;
     }
     .thumb {
@@ -172,12 +177,13 @@ export class CurveScrubber extends LitElement {
     return this.curves
       .filter((c) => c.visible)
       .map((c) => {
-        const values = interpolateCurve(c.controlPoints);
+        const prepared = prepareBrightnessConfig(c.controlPoints);
+        const pathPoints = prepared.map((cp) => ({ x: cp.lightener, y: cp.target }));
         return {
           entityId: c.entityId,
           name: c.friendlyName,
           color: c.color,
-          value: Math.round(values[pos] ?? 0),
+          value: Math.round(sampleSmoothCurveAt(pathPoints, pos)),
         };
       });
   }
@@ -220,7 +226,11 @@ export class CurveScrubber extends LitElement {
     } else if (e.key === 'End') {
       e.preventDefault();
       this._position = 100;
+    } else {
+      return;
     }
+
+    this._emitPosition();
   }
 
   private _updatePosition(e: PointerEvent): void {
@@ -233,8 +243,17 @@ export class CurveScrubber extends LitElement {
     const rect = track.getBoundingClientRect();
     const pct = ((clientX - rect.left) / rect.width) * 100;
     this._position = Math.max(0, Math.min(100, pct));
+    this._emitPosition();
+  }
 
-    // Scrubber position is reactive — bar gauges update via LitElement re-render
+  private _emitPosition(): void {
+    this.dispatchEvent(
+      new CustomEvent('scrubber-move', {
+        detail: { position: this._position },
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   protected firstUpdated(): void {

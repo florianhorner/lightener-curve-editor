@@ -1,90 +1,41 @@
 import { LitElement, html, css, svg, nothing, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { LightCurve, ControlPoint } from '../utils/types.js';
-
-// Graph coordinate system: SVG viewBox with padding for axis labels.
-const PAD_LEFT = 44;
-const PAD_RIGHT = 12;
-const PAD_TOP = 12;
-const PAD_BOTTOM = 36;
-const GRAPH_W = 300;
-const GRAPH_H = 200;
-const VB_W = PAD_LEFT + GRAPH_W + PAD_RIGHT;
-const VB_H = PAD_TOP + GRAPH_H + PAD_BOTTOM;
-
-function toSvgX(pct: number): number {
-  return PAD_LEFT + (pct / 100) * GRAPH_W;
-}
-
-function toSvgY(pct: number): number {
-  // Invert Y so 0% is at bottom, 100% at top
-  return PAD_TOP + (1 - pct / 100) * GRAPH_H;
-}
-
-function fromSvgX(svgX: number): number {
-  return ((svgX - PAD_LEFT) / GRAPH_W) * 100;
-}
-
-function fromSvgY(svgY: number): number {
-  return (1 - (svgY - PAD_TOP) / GRAPH_H) * 100;
-}
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
-/**
- * Build a smooth SVG cubic-bezier path through control points.
- * Uses monotone cubic interpolation to avoid overshoot.
- */
-function buildSmoothPath(points: { x: number; y: number }[]): string {
-  if (points.length < 2) return '';
-  if (points.length === 2) {
-    return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
-  }
-
-  // Compute tangents using finite differences (monotone)
-  const n = points.length;
-  const dx: number[] = [];
-  const dy: number[] = [];
-  const m: number[] = [];
-  for (let i = 0; i < n - 1; i++) {
-    dx.push(points[i + 1].x - points[i].x);
-    dy.push(points[i + 1].y - points[i].y);
-    m.push(dy[i] / (dx[i] || 1));
-  }
-
-  // Tangent at each point
-  const tangents: number[] = new Array(n);
-  tangents[0] = m[0];
-  tangents[n - 1] = m[n - 2];
-  for (let i = 1; i < n - 1; i++) {
-    tangents[i] = (m[i - 1] + m[i]) / 2;
-  }
-
-  let d = `M${points[0].x},${points[0].y}`;
-  for (let i = 0; i < n - 1; i++) {
-    const seg = dx[i] / 3;
-    const cp1x = points[i].x + seg;
-    const cp1y = points[i].y + tangents[i] * seg;
-    const cp2x = points[i + 1].x - seg;
-    const cp2y = points[i + 1].y - tangents[i + 1] * seg;
-    d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${points[i + 1].x},${points[i + 1].y}`;
-  }
-  return d;
-}
+import { prepareBrightnessConfig } from '../utils/interpolation.js';
+import {
+  PAD_LEFT,
+  PAD_RIGHT,
+  PAD_TOP,
+  PAD_BOTTOM,
+  GRAPH_W,
+  GRAPH_H,
+  VB_W,
+  VB_H,
+  toSvgX,
+  toSvgY,
+  fromSvgX,
+  fromSvgY,
+  clamp,
+  computeMonotoneTangents,
+  sampleSmoothCurveAt,
+  buildSmoothPath,
+  DASH_PATTERNS,
+} from '../utils/graph-math.js';
 
 @customElement('curve-graph')
 export class CurveGraph extends LitElement {
   @property({ type: Array }) curves: LightCurve[] = [];
   @property({ type: String }) selectedCurveId: string | null = null;
   @property({ type: Boolean }) readOnly = false;
+  @property({ type: Number }) scrubberPosition: number | null = null;
 
   @state() private _dragCurveIdx = -1;
   @state() private _dragPointIdx = -1;
   @state() private _hoveredPoint: { curve: number; point: number } | null = null;
 
   private _wasDragging = false;
+  private _longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private _longPressFired = false;
 
   static styles = css`
     :host {
@@ -93,6 +44,7 @@ export class CurveGraph extends LitElement {
     svg {
       width: 100%;
       height: auto;
+      max-height: 320px;
       display: block;
       border-radius: 6px;
       touch-action: none;
@@ -180,6 +132,15 @@ export class CurveGraph extends LitElement {
         min-height: 180px;
       }
     }
+    .scrubber-line {
+      stroke: var(--secondary-text, #616161);
+      stroke-width: 0.75;
+      stroke-dasharray: 3 3;
+      opacity: 0.3;
+    }
+    .scrubber-dot {
+      stroke: none;
+    }
     .tooltip-bg {
       fill: var(--tooltip-background-color, var(--primary-text-color, #212121));
       rx: 3;
@@ -219,19 +180,46 @@ export class CurveGraph extends LitElement {
     if (e.button !== 0) return;
     if (!this._isCurveInteractive(curveIdx)) return;
 
-    // The origin anchor (index 0) is not draggable
+    // The origin anchor (index 0) is not draggable or removable
     if (pointIdx === 0) return;
 
     e.preventDefault();
+    this._longPressFired = false;
+
+    // Start long-press timer for touch removal (500ms)
+    this._clearLongPress();
+    this._longPressTimer = setTimeout(() => {
+      this._longPressFired = true;
+      // Cancel any drag in progress
+      this._dragCurveIdx = -1;
+      this._dragPointIdx = -1;
+      this.dispatchEvent(
+        new CustomEvent('point-remove', {
+          detail: { curveIndex: curveIdx, pointIndex: pointIdx },
+          bubbles: true,
+          composed: true,
+        })
+      );
+    }, 500);
+
     // Capture on the SVG so move/up events fire on the SVG, not the circle
     this._svgRef?.setPointerCapture(e.pointerId);
     this._dragCurveIdx = curveIdx;
     this._dragPointIdx = pointIdx;
   }
 
+  private _clearLongPress(): void {
+    if (this._longPressTimer) {
+      clearTimeout(this._longPressTimer);
+      this._longPressTimer = null;
+    }
+  }
+
   private _onPointerMove(e: PointerEvent): void {
     if (this._dragCurveIdx < 0) return;
     e.preventDefault();
+    // Any movement cancels long-press — user is dragging
+    this._clearLongPress();
     const coords = this._getSvgCoords(e);
     if (!coords) return;
 
@@ -259,6 +247,8 @@ export class CurveGraph extends LitElement {
   }
 
   private _onPointerUp(e: PointerEvent): void {
+    this._clearLongPress();
+    if (this._longPressFired) return;
     if (this._dragCurveIdx < 0) return;
     e.preventDefault();
 
@@ -352,10 +342,10 @@ export class CurveGraph extends LitElement {
           x2="${toSvgX(100)}" y2="${toSvgY(t)}" />
         <!-- X tick labels -->
         <text class="tick-label" text-anchor="middle"
-          x="${toSvgX(t)}" y="${VB_H - PAD_BOTTOM + 16}">${t}</text>
+          x="${toSvgX(t)}" y="${VB_H - PAD_BOTTOM + 16}">${t}%</text>
         <!-- Y tick labels -->
         <text class="tick-label" text-anchor="end" dominant-baseline="middle"
-          x="${PAD_LEFT - 6}" y="${toSvgY(t)}">${t}</text>
+          x="${PAD_LEFT - 6}" y="${toSvgY(t)}">${t}%</text>
       `
       )}
 
@@ -414,6 +404,55 @@ export class CurveGraph extends LitElement {
     `;
   }
 
+  private _renderScrubberIndicator() {
+    if (this.scrubberPosition === null) return nothing;
+
+    const pos = this.scrubberPosition;
+    const x = toSvgX(pos);
+
+    // Dim overlay to the right of the scrubber position
+    const dimOverlay = svg`
+      <rect
+        x="${x}" y="${toSvgY(100)}"
+        width="${toSvgX(100) - x}" height="${GRAPH_H}"
+        fill="var(--ha-card-background, var(--card-background-color, #1c1c1c))"
+        opacity="0.25"
+        pointer-events="none"
+      />
+    `;
+
+    // Vertical dashed line from x-axis to top of graph
+    const line = svg`
+      <line class="scrubber-line"
+        x1="${x}" y1="${toSvgY(0)}"
+        x2="${x}" y2="${toSvgY(100)}" />
+    `;
+
+    // Intersection dots on each visible curve — use the same cubic
+    // Hermite interpolation as the rendered SVG path so dots sit exactly on the line.
+    const dots = this.curves
+      .filter((c) => c.visible)
+      .map((c) => {
+        const prepared = prepareBrightnessConfig(c.controlPoints);
+        const pathPoints = prepared.map((cp) => ({ x: cp.lightener, y: cp.target }));
+        const value = sampleSmoothCurveAt(pathPoints, pos);
+        const cy = toSvgY(value);
+
+        return svg`
+          <circle
+            class="scrubber-dot"
+            cx="${x}" cy="${cy}"
+            r="4"
+            fill="${c.color}"
+            filter="url(#scrubber-glow-${c.color.replace('#', '')})"
+            pointer-events="none"
+          />
+        `;
+      });
+
+    return svg`${dimOverlay}${line}${dots}`;
+  }
+
   private _renderCurve(curve: LightCurve, curveIdx: number) {
     if (!curve.visible || !curve.controlPoints.length) return nothing;
 
@@ -423,15 +462,7 @@ export class CurveGraph extends LitElement {
       const showPoints = isInteractive && !this.readOnly;
 
       // Build smooth bezier path through the prepared control points
-      const prepared = curve.controlPoints.slice().sort((a, b) => a.lightener - b.lightener);
-      // Ensure 0:0 origin
-      if (!prepared.length || prepared[0].lightener !== 0) {
-        prepared.unshift({ lightener: 0, target: 0 });
-      }
-      // Ensure 100 endpoint
-      if (prepared[prepared.length - 1].lightener !== 100) {
-        prepared.push({ lightener: 100, target: 100 });
-      }
+      const prepared = prepareBrightnessConfig(curve.controlPoints);
       const pathPoints = prepared.map((cp) => ({
         x: toSvgX(cp.lightener),
         y: toSvgY(cp.target),
@@ -447,12 +478,11 @@ export class CurveGraph extends LitElement {
       const gradientId = `grad-${curveIdx}`;
 
       // Dash patterns for colorblind accessibility (cycle through 5 patterns)
-      const dashPatterns = ['', '8 4', '4 4', '12 4 4 4', '2 4'];
-      const dashArray = dashPatterns[curveIdx % dashPatterns.length];
+      const dashArray = DASH_PATTERNS[curveIdx % DASH_PATTERNS.length];
 
       const isDraggingThisCurve = this._dragCurveIdx === curveIdx;
       const fillColor = curve.color + '33'; // 20% opacity version
-      const lineOpacity = isSelected ? 1 : 0.35;
+      const lineOpacity = isSelected ? 1 : 0.2;
 
       // Find hovered or dragged point for tooltip
       let tooltipPoint: ControlPoint | null = null;
@@ -465,8 +495,8 @@ export class CurveGraph extends LitElement {
       return svg`
       <defs>
         <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.25 : 0.08}" />
-          <stop offset="100%" stop-color="${curve.color}" stop-opacity="0" />
+          <stop offset="0%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.45 : 0.06}" />
+          <stop offset="100%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.08 : 0}" />
         </linearGradient>
       </defs>
       ${isDraggingThisCurve ? this._renderCrossHair(curve) : nothing}
@@ -499,6 +529,7 @@ export class CurveGraph extends LitElement {
                 r="20"
                 fill="transparent"
                 pointer-events="all"
+                style="touch-action: none; -webkit-touch-callout: none"
                 @pointerdown=${(e: PointerEvent) => this._onPointerDown(e, curveIdx, pi)}
                 @contextmenu=${(e: MouseEvent) => this._onPointContextMenu(e, curveIdx, pi)}
                 @pointerenter=${() => (this._hoveredPoint = { curve: curveIdx, point: pi })}
@@ -532,6 +563,11 @@ export class CurveGraph extends LitElement {
     this._svgRef = this.renderRoot.querySelector('svg');
   }
 
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._clearLongPress();
+  }
+
   render() {
     return html`
       <svg
@@ -541,6 +577,7 @@ export class CurveGraph extends LitElement {
         aria-label="Brightness curve editor graph"
         @pointermove=${this._onPointerMove}
         @pointerup=${this._onPointerUp}
+        @lostpointercapture=${this._onPointerUp}
         @dblclick=${this._onDblClick}
         @contextmenu=${(e: MouseEvent) => {
           if (!this.readOnly) e.preventDefault();
@@ -577,9 +614,28 @@ export class CurveGraph extends LitElement {
               : this.curves.map((c, i) => ({ curve: c, idx: i }));
           return order.map(({ curve, idx }) => this._renderCurve(curve, idx));
         })()}
+        <!-- Scrubber glow filters (only re-render when curves change, not on every position update) -->
+        <defs>
+          ${this.curves
+            .filter((c) => c.visible)
+            .map((c) => {
+              const id = `scrubber-glow-${c.color.replace('#', '')}`;
+              return svg`
+              <filter id="${id}" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+                <feFlood flood-color="${c.color}" flood-opacity="0.5" result="color" />
+                <feComposite in="color" in2="blur" operator="in" result="glow" />
+                <feMerge>
+                  <feMergeNode in="glow" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>`;
+            })}
+        </defs>
+        ${this._renderScrubberIndicator()}
         ${(() => {
           if (this.readOnly) return nothing;
-          if (this.selectedCurveId === null) {
+          if (this.selectedCurveId === null && this._dragCurveIdx < 0) {
             return svg`<text class="hint hint-select" text-anchor="middle"
                 x="${PAD_LEFT + GRAPH_W / 2}" y="${PAD_TOP + GRAPH_H / 2}"
                 >Select a light below to start editing</text>`;
@@ -592,7 +648,7 @@ export class CurveGraph extends LitElement {
                 >Editing: ${selected?.friendlyName ?? ''}</text>
               <text class="hint" text-anchor="end"
                 x="${PAD_LEFT + GRAPH_W - 4}" y="${PAD_TOP + GRAPH_H - 6}"
-                >Double-click to add · Right-click to remove</text>`;
+                >Double-tap to add · Long-press to remove</text>`;
         })()}
       </svg>
     `;
