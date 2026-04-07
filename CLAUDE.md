@@ -1,0 +1,51 @@
+# Lightener Curve Editor — CLAUDE.md
+
+## What this is
+
+A Home Assistant custom integration (HACS) that controls groups of lights with
+per-light brightness curves. Fork of fredck/lightener with an interactive
+curve-editor card.
+
+## Quality gates
+
+### Release ZIP structure (critical)
+
+HACS `zip_release: true` extracts the zip **directly** into
+`/config/custom_components/lightener/`. If the zip contains a
+`custom_components/lightener/` prefix, files land at
+`…/lightener/custom_components/lightener/` and HA silently fails with
+"Integration not found" — no import error, no traceback, just gone.
+
+**Rule:** The release zip MUST have `manifest.json` at the root. No
+`custom_components/` prefix anywhere in the archive.
+
+**Enforcement:** The `release.yml` workflow validates this automatically and
+fails the release if the structure is wrong.
+
+**Manual uploads:** Never manually upload a zip to a GitHub release. Always let
+the release workflow build it via the `cd … && zip -r ./` pattern. If you must
+rebuild manually, run from inside `custom_components/lightener/`:
+
+```bash
+cd custom_components/lightener
+zip lightener.zip -r ./
+# Verify:
+unzip -l lightener.zip | grep -c "custom_components/"  # must be 0
+```
+
+### Shipping procedure
+
+1. Bump version in `manifest.json` (the release workflow also patches it from the tag, but keep them in sync)
+2. Create a GitHub release with tag `vX.Y.Z`
+3. Let the Release workflow run — it builds the zip, validates structure, uploads
+4. **Do not** manually re-upload or replace the release zip asset
+5. After HACS picks up the new version, test on HA: verify the integration loads (`manifest/get` via websocket must succeed)
+
+## Development
+
+- `scripts/setup` — create venv and install deps
+- `scripts/develop` — run HA locally with the integration
+- `scripts/lint` — run linters
+- Integration source lives in `custom_components/lightener/`
+- Frontend card JS lives in `custom_components/lightener/frontend/`
+- Card source (if editing) lives in `js/`

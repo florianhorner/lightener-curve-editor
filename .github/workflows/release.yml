@@ -29,6 +29,24 @@ jobs:
           cd "${{ github.workspace }}/custom_components/lightener"
           zip lightener.zip -r ./
 
+      - name: "Validate ZIP structure"
+        shell: "bash"
+        run: |
+          # HACS zip_release extracts directly into custom_components/<domain>/
+          # Files MUST be at the zip root — no nested custom_components/ prefix.
+          # A wrong structure silently breaks the integration ("Integration not found").
+          if unzip -l "${{ github.workspace }}/custom_components/lightener/lightener.zip" | grep -q "custom_components/"; then
+            echo "::error::ZIP contains nested custom_components/ path. HACS will extract this wrong."
+            echo "Files in zip:"
+            unzip -l "${{ github.workspace }}/custom_components/lightener/lightener.zip"
+            exit 1
+          fi
+          if ! unzip -l "${{ github.workspace }}/custom_components/lightener/lightener.zip" | grep -q "manifest.json"; then
+            echo "::error::ZIP is missing manifest.json at root level."
+            exit 1
+          fi
+          echo "✓ ZIP structure valid — manifest.json at root, no nested paths"
+
       - name: "Upload the ZIP file to the release"
         uses: softprops/action-gh-release@v0.1.15
         with:

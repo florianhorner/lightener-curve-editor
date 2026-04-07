@@ -2,12 +2,14 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { LightCurve, Hass } from './utils/types.js';
 import { curvesToWsPayload, wsPayloadToCurves, cloneCurves, curvesEqual } from './utils/data.js';
+import { easeOutCubic, CURVE_COLORS } from './utils/graph-math.js';
 import './components/curve-graph.js';
 import './components/curve-scrubber.js';
 import './components/curve-legend.js';
 import './components/curve-footer.js';
 
 const SAVE_SUCCESS_DISPLAY_MS = 2000;
+const CANCEL_ANIM_DURATION_MS = 300;
 
 const WARNING_ICON = html`<svg
   class="status-icon"
@@ -24,19 +26,6 @@ const WARNING_ICON = html`<svg
   <line x1="12" y1="9" x2="12" y2="13"></line>
   <line x1="12" y1="17" x2="12.01" y2="17"></line>
 </svg>`;
-
-const CURVE_COLORS = [
-  '#42a5f5',
-  '#ef5350',
-  '#5c6bc0',
-  '#ffa726',
-  '#ab47bc',
-  '#26c6da',
-  '#ec407a',
-  '#8d6e63',
-  '#ffca28',
-  '#7e57c2',
-];
 
 function createMockCurves(): LightCurve[] {
   return [
@@ -79,6 +68,133 @@ function createMockCurves(): LightCurve[] {
   ];
 }
 
+// --- Visual card editor for the HA dashboard UI ---
+
+@customElement('lightener-curve-card-editor')
+export class LightenerCurveCardEditor extends LitElement {
+  @state() private _config: Record<string, unknown> = {};
+  @state() private _hass: Hass | null = null;
+
+  static styles = css`
+    :host {
+      display: block;
+    }
+    .form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--secondary-text-color, #616161);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    select,
+    input {
+      padding: 8px 12px;
+      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+      border-radius: 8px;
+      background: var(--card-background-color, #fff);
+      color: var(--primary-text-color, #212121);
+      font-size: 14px;
+      font-family: inherit;
+    }
+    select:focus,
+    input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px #2563eb;
+    }
+    .hint {
+      font-size: 11px;
+      color: var(--secondary-text-color, #616161);
+      opacity: 0.7;
+    }
+  `;
+
+  setConfig(config: Record<string, unknown>): void {
+    this._config = config;
+  }
+
+  set hass(hass: Hass) {
+    this._hass = hass;
+  }
+
+  private _getLightEntities(): { id: string; name: string }[] {
+    if (!this._hass?.states) return [];
+    return Object.keys(this._hass.states)
+      .filter((id) => id.startsWith('light.'))
+      .map((id) => ({
+        id,
+        name: this._hass!.states[id]?.attributes?.friendly_name ?? id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private _fireConfigChanged(): void {
+    this.dispatchEvent(
+      new CustomEvent('config-changed', {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  private _onEntityChange(e: Event): void {
+    const value = (e.target as HTMLSelectElement).value;
+    this._config = { ...this._config, entity: value || undefined };
+    this._fireConfigChanged();
+  }
+
+  private _onTitleChange(e: Event): void {
+    const value = (e.target as HTMLInputElement).value;
+    this._config = { ...this._config, title: value || undefined };
+    this._fireConfigChanged();
+  }
+
+  render() {
+    const entities = this._getLightEntities();
+    const currentEntity = (this._config.entity as string) ?? '';
+    const currentTitle = (this._config.title as string) ?? '';
+
+    return html`
+      <div class="form">
+        <div class="field">
+          <label>Entity</label>
+          <select .value=${currentEntity} @change=${this._onEntityChange}>
+            <option value="">Select a lightener entity...</option>
+            ${entities.map(
+              (e) => html`
+                <option value=${e.id} ?selected=${e.id === currentEntity}>${e.name}</option>
+              `
+            )}
+          </select>
+          <span class="hint"
+            >Choose the lightener group whose brightness curves you want to edit.</span
+          >
+        </div>
+        <div class="field">
+          <label>Title (optional)</label>
+          <input
+            type="text"
+            .value=${currentTitle}
+            placeholder="Brightness Curves"
+            @input=${this._onTitleChange}
+          />
+        </div>
+      </div>
+    `;
+  }
+}
+
 @customElement('lightener-curve-card')
 export class LightenerCurveCard extends LitElement {
   @state() private _curves: LightCurve[] = [];
@@ -90,13 +206,18 @@ export class LightenerCurveCard extends LitElement {
   @state() private _saveError: string | null = null;
   @state() private _saveSuccess = false;
   @state() private _loading = false;
+  @state() private _scrubberPosition: number | null = null;
+  @state() private _cancelAnimating = false;
 
   @state() private _hass: Hass | null = null;
+  private _undoStack: LightCurve[][] = [];
+  private _dragUndoPushed = false;
   private _loaded = false;
   private _loadedEntityId: string | undefined = undefined;
   private _boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _boundBeforeUnload: ((e: BeforeUnloadEvent) => void) | null = null;
   private _saveSuccessTimer: ReturnType<typeof setTimeout> | null = null;
+  private _cancelAnimFrame: number | null = null;
 
   static styles = css`
     :host {
@@ -113,6 +234,7 @@ export class LightenerCurveCard extends LitElement {
 
       display: block;
       font-family: var(--paper-font-body1_-_font-family, 'Roboto', sans-serif);
+      height: fit-content;
     }
     .card {
       background: var(--card-bg);
@@ -219,14 +341,31 @@ export class LightenerCurveCard extends LitElement {
 
   // --- HA card interface ---
 
+  static getConfigElement(): HTMLElement {
+    return document.createElement('lightener-curve-card-editor');
+  }
+
+  static getStubConfig(): Record<string, unknown> {
+    return { type: 'custom:lightener-curve-card' };
+  }
+
   setConfig(config: Record<string, unknown>): void {
+    const entityChanged = config.entity !== this._config.entity;
     this._config = config;
-    this._tryLoadCurves();
+    if (entityChanged) {
+      this._loaded = false;
+      this._loadedEntityId = undefined;
+      this._tryLoadCurves();
+    }
   }
 
   set hass(hass: Hass) {
+    const hadHass = !!this._hass;
     this._hass = hass;
-    this._tryLoadCurves();
+    // Only load on first hass assignment or if not yet loaded
+    if (!hadHass || !this._loaded) {
+      this._tryLoadCurves();
+    }
   }
 
   getCardSize(): number {
@@ -272,6 +411,11 @@ export class LightenerCurveCard extends LitElement {
       clearTimeout(this._saveSuccessTimer);
       this._saveSuccessTimer = null;
     }
+    if (this._cancelAnimFrame) {
+      cancelAnimationFrame(this._cancelAnimFrame);
+      this._cancelAnimFrame = null;
+      this._cancelAnimating = false;
+    }
   }
 
   private _onKeyDown(e: KeyboardEvent): void {
@@ -282,9 +426,16 @@ export class LightenerCurveCard extends LitElement {
         this._onSave();
       }
     }
+    // Ctrl+Z / Cmd+Z to undo
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      if (!this._saving && !this._cancelAnimating && this._undoStack.length > 0) {
+        e.preventDefault();
+        this._undo();
+      }
+    }
     // Escape to cancel
     if (e.key === 'Escape') {
-      if (this._isDirty && !this._saving) {
+      if (this._isDirty && !this._saving && !this._cancelAnimating) {
         e.preventDefault();
         this._onCancel();
       }
@@ -314,32 +465,48 @@ export class LightenerCurveCard extends LitElement {
 
     this._loadError = null;
     this._loading = true;
+    // Capture the entity we're loading so we can discard stale responses
+    const requestedEntity = this._entityId;
 
     try {
       const result = await this._hass.callWS<{
         entities: Record<string, { brightness: Record<string, string> }>;
       }>({
         type: 'lightener/get_curves',
-        entity_id: this._entityId,
+        entity_id: requestedEntity,
       });
+
+      // Discard if entity changed while the request was in flight
+      if (this._entityId !== requestedEntity) return;
 
       const curves = wsPayloadToCurves(result.entities, this._hass.states, CURVE_COLORS);
       this._curves = curves;
       this._originalCurves = cloneCurves(curves);
       this._loaded = true;
-      this._loadedEntityId = this._entityId;
+      this._loadedEntityId = requestedEntity;
     } catch (err) {
+      if (this._entityId !== requestedEntity) return;
       console.error('[Lightener] Failed to load curves:', err);
       this._loadError = String(err);
-      // _loaded stays false so the next hass update can retry.
+      this._loaded = true;
+      this._loadedEntityId = requestedEntity;
     } finally {
       this._loading = false;
+      // If entity changed during flight, trigger reload for the new entity
+      if (this._entityId !== requestedEntity) {
+        this._tryLoadCurves();
+      }
     }
   }
 
   // --- Event handlers ---
 
+  private _onScrubberMove(e: CustomEvent): void {
+    this._scrubberPosition = e.detail.position;
+  }
+
   private _onSelectCurve(e: CustomEvent): void {
+    if (this._cancelAnimating) return;
     const { entityId } = e.detail;
     const curve = this._curves.find((c) => c.entityId === entityId);
     // Cannot select a hidden curve
@@ -348,8 +515,89 @@ export class LightenerCurveCard extends LitElement {
     this._selectedCurveId = this._selectedCurveId === entityId ? null : entityId;
   }
 
+  private _pushUndo(): void {
+    this._undoStack.push(cloneCurves(this._curves));
+    // Cap at 50 entries
+    if (this._undoStack.length > 50) this._undoStack.shift();
+  }
+
+  private _undo(): void {
+    if (this._undoStack.length === 0 || this._cancelAnimFrame !== null) return;
+    this._animateCurvesTo(this._undoStack.pop()!);
+  }
+
+  /**
+   * Animate curves from current state to endCurves over CANCEL_ANIM_DURATION_MS.
+   * Shared by undo and cancel. onComplete runs after the final frame.
+   */
+  private _animateCurvesTo(endCurves: LightCurve[], onComplete?: () => void): void {
+    const startCurves = cloneCurves(this._curves);
+    this._cancelAnimating = true;
+    const startTime = performance.now();
+
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const rawT = Math.min(elapsed / CANCEL_ANIM_DURATION_MS, 1);
+      const t = easeOutCubic(rawT);
+
+      const interpolated: LightCurve[] = endCurves.map((endCurve, ci) => {
+        const startCurve = startCurves[ci];
+        if (!startCurve) return endCurve;
+
+        const startPts = startCurve.controlPoints;
+        const endPts = endCurve.controlPoints;
+        const sharedLen = Math.min(startPts.length, endPts.length);
+        const points: { lightener: number; target: number }[] = [];
+
+        for (let pi = 0; pi < sharedLen; pi++) {
+          points.push({
+            lightener: Math.round(
+              startPts[pi].lightener + (endPts[pi].lightener - startPts[pi].lightener) * t
+            ),
+            target: Math.round(startPts[pi].target + (endPts[pi].target - startPts[pi].target) * t),
+          });
+        }
+        // Extra end points snap in on final frame
+        if (endPts.length > sharedLen && rawT >= 1) {
+          for (let pi = sharedLen; pi < endPts.length; pi++) points.push({ ...endPts[pi] });
+        }
+        // Extra start points kept until final frame
+        if (startPts.length > sharedLen && rawT < 1) {
+          for (let pi = sharedLen; pi < startPts.length; pi++) points.push({ ...startPts[pi] });
+        }
+
+        points.sort((a, b) => a.lightener - b.lightener);
+        return { ...endCurve, controlPoints: points };
+      });
+
+      this._curves = interpolated;
+
+      if (rawT < 1) {
+        this._cancelAnimFrame = requestAnimationFrame(tick);
+      } else {
+        this._curves = cloneCurves(endCurves);
+        this._cancelAnimating = false;
+        this._cancelAnimFrame = null;
+        onComplete?.();
+      }
+    };
+
+    this._cancelAnimFrame = requestAnimationFrame(tick);
+  }
+
   private _onPointMove(e: CustomEvent): void {
+    if (this._cancelAnimating) return;
+    // Push undo once at start of each drag gesture
+    if (!this._dragUndoPushed) {
+      this._pushUndo();
+      this._dragUndoPushed = true;
+    }
     const { curveIndex, pointIndex, lightener, target } = e.detail;
+    // Auto-select the curve being dragged so others dim
+    const draggedCurve = this._curves[curveIndex];
+    if (draggedCurve && this._selectedCurveId !== draggedCurve.entityId) {
+      this._selectedCurveId = draggedCurve.entityId;
+    }
     const curves = [...this._curves];
     const curve = { ...curves[curveIndex] };
     const points = [...curve.controlPoints];
@@ -360,23 +608,22 @@ export class LightenerCurveCard extends LitElement {
   }
 
   private _onPointDrop(_e: CustomEvent): void {
-    // Dirty state is tracked automatically via _isDirty getter.
-    // Save happens explicitly via the footer button.
+    this._dragUndoPushed = false;
   }
 
   private _onPointAdd(e: CustomEvent): void {
+    if (this._cancelAnimating) return;
     const { lightener, target, entityId } = e.detail;
-    // Determine which curve to add the point to
     const targetEntityId = entityId ?? this._selectedCurveId;
     if (!targetEntityId) return;
 
     const curveIdx = this._curves.findIndex((c) => c.entityId === targetEntityId);
     if (curveIdx < 0) return;
 
-    // Reject if a point already exists at this lightener value
     const existing = this._curves[curveIdx].controlPoints;
     if (existing.some((cp) => cp.lightener === lightener)) return;
 
+    this._pushUndo();
     const curves = [...this._curves];
     const curve = { ...curves[curveIdx] };
     const points = [...curve.controlPoints, { lightener, target }];
@@ -388,12 +635,15 @@ export class LightenerCurveCard extends LitElement {
   }
 
   private _onPointRemove(e: CustomEvent): void {
+    if (this._cancelAnimating) return;
+    // Reset drag-undo flag in case removal came from long-press (which skips point-drop)
+    this._dragUndoPushed = false;
     const { curveIndex, pointIndex } = e.detail;
     const curve = this._curves[curveIndex];
     if (!curve) return;
-    // Must keep at least 2 points (origin + one more)
     if (curve.controlPoints.length <= 2) return;
 
+    this._pushUndo();
     const curves = [...this._curves];
     const updated = { ...curves[curveIndex] };
     updated.controlPoints = updated.controlPoints.filter((_, i) => i !== pointIndex);
@@ -402,6 +652,7 @@ export class LightenerCurveCard extends LitElement {
   }
 
   private _onToggleCurve(e: CustomEvent): void {
+    if (this._cancelAnimating) return;
     const { entityId } = e.detail;
     const curves = this._curves.map((c) =>
       c.entityId === entityId ? { ...c, visible: !c.visible } : c
@@ -417,7 +668,7 @@ export class LightenerCurveCard extends LitElement {
   }
 
   private async _onSave(): Promise<void> {
-    if (!this._hass || !this._entityId || this._saving) return;
+    if (!this._hass || !this._entityId || this._saving || this._cancelAnimating) return;
 
     this._saving = true;
     this._saveError = null;
@@ -429,6 +680,7 @@ export class LightenerCurveCard extends LitElement {
         curves: payload,
       });
       this._originalCurves = cloneCurves(this._curves);
+      this._undoStack = [];
       // Re-fetch from backend in case reload normalised data
       this._loaded = false;
       this._tryLoadCurves();
@@ -452,8 +704,11 @@ export class LightenerCurveCard extends LitElement {
   }
 
   private _onCancel(): void {
-    this._curves = cloneCurves(this._originalCurves);
-    this._selectedCurveId = null;
+    if (this._cancelAnimating) return;
+    this._undoStack = [];
+    this._animateCurvesTo(cloneCurves(this._originalCurves), () => {
+      this._selectedCurveId = null;
+    });
   }
 
   render() {
@@ -482,7 +737,8 @@ export class LightenerCurveCard extends LitElement {
               <curve-graph
                 .curves=${this._curves}
                 .selectedCurveId=${this._selectedCurveId}
-                .readOnly=${!this._isAdmin}
+                .readOnly=${!this._isAdmin || this._cancelAnimating}
+                .scrubberPosition=${this._scrubberPosition}
                 @point-move=${this._onPointMove}
                 @point-drop=${this._onPointDrop}
                 @point-add=${this._onPointAdd}
@@ -490,7 +746,11 @@ export class LightenerCurveCard extends LitElement {
               ></curve-graph>
             </div>`}
 
-        <curve-scrubber .curves=${this._curves} .readOnly=${!this._isAdmin}></curve-scrubber>
+        <curve-scrubber
+          .curves=${this._curves}
+          .readOnly=${!this._isAdmin}
+          @scrubber-move=${this._onScrubberMove}
+        ></curve-scrubber>
 
         <curve-legend
           .curves=${this._curves}
@@ -500,11 +760,13 @@ export class LightenerCurveCard extends LitElement {
         ></curve-legend>
 
         <curve-footer
-          .dirty=${this._isDirty}
+          .dirty=${this._isDirty || this._cancelAnimating}
           .readOnly=${!this._isAdmin}
-          .saving=${this._saving}
+          .saving=${this._saving || this._cancelAnimating}
+          .canUndo=${this._undoStack.length > 0 && !this._cancelAnimating}
           @save-curves=${this._onSave}
           @cancel-curves=${this._onCancel}
+          @undo-curves=${() => this._undo()}
         ></curve-footer>
 
         ${this._saveSuccess

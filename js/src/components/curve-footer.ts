@@ -6,6 +6,7 @@ export class CurveFooter extends LitElement {
   @property({ type: Boolean }) dirty = false;
   @property({ type: Boolean }) readOnly = false;
   @property({ type: Boolean }) saving = false;
+  @property({ type: Boolean }) canUndo = false;
 
   static styles = css`
     :host {
@@ -61,13 +62,24 @@ export class CurveFooter extends LitElement {
     .btn-save:hover:not(:disabled) {
       background: #1d4fd8;
     }
-    .btn-cancel {
+    .btn-ghost {
       background: transparent;
       color: var(--secondary-text, #616161);
       border: 1px solid var(--divider, rgba(127, 127, 127, 0.2));
     }
-    .btn-cancel:hover:not(:disabled) {
+    .btn-ghost:hover:not(:disabled) {
       background: rgba(128, 128, 128, 0.08);
+    }
+    .btn-undo {
+      padding: 7px 10px;
+      margin-right: auto;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .undo-icon {
+      width: 14px;
+      height: 14px;
     }
     @media (max-width: 500px) {
       .footer {
@@ -87,6 +99,10 @@ export class CurveFooter extends LitElement {
 
   private _onCancel() {
     this.dispatchEvent(new CustomEvent('cancel-curves', { bubbles: true, composed: true }));
+  }
+
+  private _onUndo() {
+    this.dispatchEvent(new CustomEvent('undo-curves', { bubbles: true, composed: true }));
   }
 
   render() {
@@ -112,13 +128,36 @@ export class CurveFooter extends LitElement {
       `;
     }
 
-    if (!this.dirty) return html`<div class="footer"></div>`;
+    if (!this.dirty && !this.canUndo) return html`<div class="footer"></div>`;
 
     return html`
       <div class="footer">
-        <span class="unsaved-label">Unsaved changes</span>
+        ${this.canUndo
+          ? html`
+              <button
+                class="btn-ghost btn-undo"
+                @click=${this._onUndo}
+                ?disabled=${this.saving}
+                aria-label="Undo"
+              >
+                <svg
+                  class="undo-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
+                Undo
+              </button>
+            `
+          : html`<span class="unsaved-label">Unsaved changes</span>`}
         <button
-          class="btn-cancel"
+          class="btn-ghost"
           @click=${this._onCancel}
           ?disabled=${this.saving}
           aria-label="Cancel changes (Esc)"
