@@ -1,6 +1,5 @@
 """The config flow for Lightener."""
 
-import re
 from typing import Any
 
 import voluptuous as vol
@@ -13,10 +12,8 @@ from homeassistant.helpers.entity_registry import (
     async_get,
 )
 from homeassistant.helpers.selector import selector
-from homeassistant.util.color import brightness_to_value
 
-from .const import DOMAIN, TYPE_DIMMABLE, TYPE_ONOFF
-from .util import get_light_type
+from .const import DEFAULT_BRIGHTNESS, DOMAIN
 
 
 class LightenerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -41,12 +38,6 @@ class LightenerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Manage the selection of the lights controlled by the Lightener light."""
         return await self.lightener_flow.async_step_lights(user_input)
-
-    async def async_step_light_configuration(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage the configuration for each controlled light."""
-        return await self.lightener_flow.async_step_light_configuration(user_input)
 
     @staticmethod
     @callback
@@ -74,12 +65,6 @@ class LightenerOptionsFlow(config_entries.OptionsFlow):
         """Manage the selection of the lights controlled by the Lightener light."""
         return await self.lightener_flow.async_step_lights(user_input)
 
-    async def async_step_light_configuration(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage the configuration for each controlled light."""
-        return await self.lightener_flow.async_step_light_configuration(user_input)
-
 
 class LightenerFlow:
     """Handle steps for both the config and the options flow."""
@@ -95,7 +80,6 @@ class LightenerFlow:
         self.flow_handler = flow_handler
         self.config_entry = config_entry
         self.data = {} if config_entry is None else config_entry.data.copy()
-        self.local_data = {}
         self.steps = steps
 
     async def async_step_name(self, user_input: dict[str, Any] | None = None):
@@ -146,23 +130,32 @@ class LightenerFlow:
             )
 
         if user_input is not None:
-            controlled_entities = self.local_data["controlled_entities"] = (
-                user_input.get("controlled_entities")
-            )
+            selected = user_input.get("controlled_entities")
 
-            if not controlled_entities:
+            if not selected:
                 errors["controlled_entities"] = "controlled_entities_empty"
             else:
-                entities = self.data[CONF_ENTITIES] = {}
+                # Build entities dict, preserving existing curves for lights
+                # that were already configured, and assigning defaults to new ones.
+                existing_entities = self.data.get(CONF_ENTITIES, {})
+                entities = {}
 
-                for entity in controlled_entities:
-                    entities[entity] = {}
+                for entity_id in selected:
+                    if entity_id in existing_entities:
+                        # Deep-copy to avoid mutating the live config proxy
+                        entities[entity_id] = dict(existing_entities[entity_id])
+                    else:
+                        # New light — assign default linear curve
+                        entities[entity_id] = {
+                            CONF_BRIGHTNESS: dict(DEFAULT_BRIGHTNESS)
+                        }
 
-                return await self.async_step_light_configuration()
+                self.data[CONF_ENTITIES] = entities
+                return await self.async_save_data()
 
         return self.flow_handler.async_show_form(
             step_id=self.steps.get("lights", "lights"),
-            last_step=False,
+            last_step=True,
             data_schema=vol.Schema(
                 {
                     vol.Required(
@@ -178,100 +171,6 @@ class LightenerFlow:
                     )
                 }
             ),
-            errors=errors,
-        )
-
-    async def async_step_light_configuration(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage the configuration for each controlled light."""
-
-        brightness = ""
-        placeholders = {}
-        errors = {}
-
-        controlled_entities = self.local_data.get("controlled_entities")
-
-        if user_input is not None:
-            brightness = {}
-
-            for entry in user_input.get("brightness", "").splitlines():
-                match = re.fullmatch(r"^\s*(\d+)\s*:\s*(\d+)\s*$", entry)
-
-                if match is not None:
-                    left = int(match.group(1))
-                    right = int(match.group(2))
-
-                    if left >= 1 and left <= 100 and right >= 0 and right <= 100:
-                        brightness[str(left)] = str(right)
-                        continue
-
-                errors["brightness"] = "invalid_brightness"
-                placeholders["error_entry"] = entry
-                break
-
-            if len(errors) == 0:
-                entities: dict = self.data.get(CONF_ENTITIES)
-                entities.get(self.local_data.get("current_light"))[CONF_BRIGHTNESS] = (
-                    brightness
-                )
-
-                if len(controlled_entities):
-                    return await self.async_step_light_configuration()
-
-                return await self.async_save_data()
-        else:
-            light = self.local_data["current_light"] = controlled_entities.pop(0)
-
-        light = self.local_data["current_light"]
-        state = self.flow_handler.hass.states.get(light)
-        placeholders["light_name"] = state.name
-
-        light_type = get_light_type(hass=self.flow_handler.hass, entity_id=light)
-
-        # Placeholder for the current brightness value (in percentage).
-        current_brightness = (
-            state.attributes.get("brightness", 0)
-            if light_type == TYPE_DIMMABLE
-            else 255
-            if light_type == TYPE_ONOFF and state.state == "on"
-            else 0
-        )
-
-        placeholders["current_brightness"] = (
-            f"{round(brightness_to_value((1, 100), current_brightness))}%"
-            if current_brightness
-            else "?"
-            if state.state == "on"
-            else "off"
-        )
-
-        if user_input is None:
-            # Load the previously configured data.
-            if self.config_entry is not None:
-                brightness = (
-                    self.config_entry.data.get(CONF_ENTITIES, {})
-                    .get(light, {})
-                    .get(CONF_BRIGHTNESS, {})
-                )
-
-                brightness = "\n".join(
-                    [(str(key) + ": " + str(brightness[key])) for key in brightness]
-                )
-        else:
-            brightness = user_input["brightness"]
-
-        schema = {
-            vol.Optional(
-                "brightness", description={"suggested_value": brightness}
-            ): selector({"template": {}})
-        }
-
-        return self.flow_handler.async_show_form(
-            step_id=self.steps.get("light_configuration", "light_configuration"),
-            last_step=len(controlled_entities) == 0,
-            data_schema=vol.Schema(schema),
-            description_placeholders=placeholders,
             errors=errors,
         )
 

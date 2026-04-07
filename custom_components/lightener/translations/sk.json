@@ -13,48 +13,28 @@
       },
       "lights": {
         "title": "Ovládané svetlá",
+        "description": "Nové svetlá začínajú s lineárnou krivkou jasu. Na vizuálnu úpravu kriviek pridajte kartu **Lightener Curve Editor** na váš panel po nastavení.",
         "data": {
           "controlled_entities": "Vyberte svetelné entity, ktoré chcete ovládať týmto zariadením Lightener"
-        }
-      },
-      "light_configuration": {
-        "title": "Konfigurovať \"{light_name}\"",
-        "description": "Current brightness: {current_brightness}",
-        "data": {
-          "brightness": "Mapovanie jasu"
-        },
-        "data_description": {
-          "brightness": "Zoznam, ktorý mapuje jas tohto svetla, keď Lightener dosiahne určité úrovne jasu. Každý riadok má formát (Lightener jas %): (Kontrolovaný jas svetla %). Napríklad, \"60:100\" určuje, keď Lightener dosiahne jas 60 %, \"{light_name}\" dosiahne 100% jas"
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Vyberte aspoň jedno svetlo",
-      "invalid_brightness": "Neplatná konfigurácia mapovania jasu \"{error_entry}\". Každý riadok musí mať formát \"(číslo od 1 do 100): (číslo od 0 do 100)\". Napríklad, \"40:100\""
+      "controlled_entities_empty": "Vyberte aspoň jedno svetlo"
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Ovládané svetlá",
+        "description": "Pridajte alebo odoberte svetlá nižšie. Existujúce krivky jasu sú zachované. Na vizuálnu úpravu kriviek použite kartu **Lightener Curve Editor** na vašom paneli.",
         "data": {
           "controlled_entities": "Vyberte svetelné entity, ktoré chcete ovládať týmto zariadením Lightener"
-        }
-      },
-      "light_configuration": {
-        "title": "Konfigurovať \"{light_name}\"",
-        "description": "Current brightness: {current_brightness}",
-        "data": {
-          "brightness": "Mapovanie jasu"
-        },
-        "data_description": {
-          "brightness": "Zoznam, ktorý mapuje jas tohto svetla, keď Lightener dosiahne určité úrovne jasu. Každý riadok má formát (Jas Lightener %): (Kontrolovaný jas svetla %). Napríklad, \"60:100\" určuje, že keď Lightener dosiahne jas 60 %, \"{light_name}\" dosiahne 100% jas"
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Vyberte aspoň jedno svetlo",
-      "invalid_brightness": "Neplatná konfigurácia mapovania jasu \"{error_entry}\". Každý riadok musí mať formát \"(číslo od 1 do 100): (číslo od 0 do 100)\". Napríklad, \"40:100\""
+      "controlled_entities_empty": "Vyberte aspoň jedno svetlo"
     }
   }
 }
