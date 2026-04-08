@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Visual card configuration editor (`lightener-curve-card-editor`) with Lightener entity picker and optional custom title
+- `DEFAULT_BRIGHTNESS` constant in `const.py` for consistent default curves across config flow and light platform
 - Undo support for curve edits (footer undo button and Ctrl/Cmd+Z shortcut)
 - Shared graph math module (`graph-math.ts`) with geometry/interpolation helpers reused by graph and scrubber
 - 44 new Vitest unit tests (`card-logic.test.ts` and `graph-math.test.ts`) covering undo flow, interaction guards, and curve math
@@ -16,9 +17,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Config flow simplified: name your device, pick lights, done — no more text-based brightness mapping
+- Options flow simplified: add or remove lights in one step; existing brightness curves are preserved
+- Both flows now guide users to the Lightener Curve Editor card for visual curve editing
 - Scrubber now emits position events and stays in sync with the graph, including a vertical guide and per-curve value dots
 - Curve legend shape markers now use shared constants from graph math utilities for consistent rendering
 - Graph and scrubber now sample values through the same smooth-curve interpolation path for consistent badge and graph readouts
+
+### Removed
+
+- Text-based per-light brightness mapping step (replaced by visual curve editor card)
 
 ### Fixed
 

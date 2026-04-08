@@ -13,48 +13,28 @@
       },
       "lights": {
         "title": "Controlled lights",
+        "description": "New lights start with a linear brightness curve. To customize curves visually, add the **Lightener Curve Editor** card to your dashboard after setup.",
         "data": {
           "controlled_entities": "Select the light entities to be controlled by this Lightener device"
-        }
-      },
-      "light_configuration": {
-        "title": "Configure \"{light_name}\"",
-        "description": "Current brightness: {current_brightness}",
-        "data": {
-          "brightness": "Brightness mapping"
-        },
-        "data_description": {
-          "brightness": "A list that maps the brightness of this light when the Lightener reaches certain brightness levels. Each line has the format (Lightener brightness %): (Controlled light brightness %). For example, \"60:100\" specifies that when the Lightener reaches 60% brightness, \"{light_name}\" will reach 100% brightness"
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Select at least one light",
-      "invalid_brightness": "Invalid brightness mapping configuration \"{error_entry}\". Each line must have the format \"(number from 1 to 100): (number from 0 to 100)\". For example, \"40:100\""
+      "controlled_entities_empty": "Select at least one light"
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Controlled lights",
+        "description": "Add or remove lights below. Existing brightness curves are preserved. To edit curves visually, use the **Lightener Curve Editor** card on your dashboard.",
         "data": {
           "controlled_entities": "Select the light entities to be controlled by this Lightener device"
-        }
-      },
-      "light_configuration": {
-        "title": "Configure \"{light_name}\"",
-        "description": "Current brightness: {current_brightness}",
-        "data": {
-          "brightness": "Brightness mapping"
-        },
-        "data_description": {
-          "brightness": "A list that maps the brightness of this light when the Lightener reaches certain brightness levels. Each line has the format (Lightener brightness %): (Controlled light brightness %). For example, \"60:100\" specifies that when the Lightener reaches 60% brightness, \"{light_name}\" will reach 100% brightness"
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Select at least one light",
-      "invalid_brightness": "Invalid brightness mapping configuration \"{error_entry}\". Each line must have the format \"(number from 1 to 100): (number from 0 to 100)\". For example, \"40:100\""
+      "controlled_entities_empty": "Select at least one light"
     }
   }
 }

@@ -13,48 +13,28 @@
       },
       "lights": {
         "title": "Luzes controladas",
+        "description": "Novas luzes começam com uma curva de brilho linear. Para personalizar curvas visualmente, adicione o cartão **Lightener Curve Editor** ao seu painel após a configuração.",
         "data": {
           "controlled_entities": "Selecione as entidades de luz a serem controladas por este dispositivo Lightener"
-        }
-      },
-      "light_configuration": {
-        "title": "Configurar \"{light_name}\"",
-        "description": "Brilho atual: {current_brightness}",
-        "data": {
-          "brightness": "Mapeamento de brilho"
-        },
-        "data_description": {
-          "brightness": "Uma lista que mapeia o brilho desta luz quando o Lightener atinge determinados níveis de brilho. Cada linha tem o formato (Brilho do Lightener %): (Brilho da luz controlada %). Por exemplo, \"60:100\" especifica que quando o Lightener atinge 60% de brilho, \"{light_name}\" atingirá 100% de brilho"
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Selecione pelo menos uma luz",
-      "invalid_brightness": "Configuração de mapeamento de brilho inválida \"{error_entry}\". Cada linha deve ter o formato \"(número de 1 a 100): (número de 0 a 100)\". Por exemplo, \"40:100\""
+      "controlled_entities_empty": "Selecione pelo menos uma luz"
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Luzes controladas",
+        "description": "Adicione ou remova luzes abaixo. As curvas de brilho existentes são preservadas. Para editar curvas visualmente, use o cartão **Lightener Curve Editor** no seu painel.",
         "data": {
           "controlled_entities": "Selecione as entidades de luz a serem controladas por este dispositivo Lightener"
-        }
-      },
-      "light_configuration": {
-        "title": "Configurar \"{light_name}\"",
-        "description": "Brilho atual: {current_brightness}",
-        "data": {
-          "brightness": "Mapeamento de brilho"
-        },
-        "data_description": {
-          "brightness": "Uma lista que mapeia o brilho desta luz quando o Lightener atinge determinados níveis de brilho. Cada linha tem o formato (Brilho do Lightener %): (Brilho da luz controlada %). Por exemplo, \"60:100\" especifica que quando o Lightener atinge 60% de brilho, \"{light_name}\" atingirá 100% de brilho."
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Selecione pelo menos uma luz",
-      "invalid_brightness": "Configuração de mapeamento de brilho inválida \"{error_entry}\". Cada linha deve ter o formato \"(número de 1 a 100): (número de 0 a 100)\". Por exemplo, \"40:100\""
+      "controlled_entities_empty": "Selecione pelo menos uma luz"
     }
   }
 }

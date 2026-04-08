@@ -13,10 +13,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lightener import const
 from custom_components.lightener.config_flow import LightenerConfigFlow
+from custom_components.lightener.const import DEFAULT_BRIGHTNESS
 
 
 async def test_config_flow_steps(hass: HomeAssistant) -> None:
-    """Test if the full config flow works."""
+    """Test if the full config flow works — name, select lights, done with default curves."""
 
     result = await hass.config_entries.flow.async_init(
         const.DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -34,7 +35,7 @@ async def test_config_flow_steps(hass: HomeAssistant) -> None:
 
     assert result["type"] == "form"
     assert result["step_id"] == "lights"
-    assert result["last_step"] is False
+    assert result["last_step"] is True
 
     assert get_required(result, "controlled_entities") is True
 
@@ -43,31 +44,40 @@ async def test_config_flow_steps(hass: HomeAssistant) -> None:
         user_input={"controlled_entities": ["light.test1"]},
     )
 
-    assert result["type"] == "form"
-    assert result["step_id"] == "light_configuration"
-    assert result["last_step"] is True
-    assert result["description_placeholders"] == {
-        "light_name": "test1",
-        "current_brightness": "off",
-    }
-
-    assert get_required(result, "brightness") is False
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        user_input={"brightness": "10:20"},
-    )
-
     assert result["type"] == "create_entry"
     assert result["title"] == "Test Name"
     assert result["data"] == {
         CONF_FRIENDLY_NAME: "Test Name",
-        CONF_ENTITIES: {"light.test1": {CONF_BRIGHTNESS: {"10": "20"}}},
+        CONF_ENTITIES: {"light.test1": {CONF_BRIGHTNESS: dict(DEFAULT_BRIGHTNESS)}},
     }
 
 
-async def test_options_flow_steps(hass: HomeAssistant) -> None:
-    """Test if the full options flow works."""
+async def test_config_flow_multiple_lights(hass: HomeAssistant) -> None:
+    """Test config flow with multiple lights — all get default curves."""
+
+    result = await hass.config_entries.flow.async_init(
+        const.DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={"name": "Test Name"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={"controlled_entities": ["light.test1", "light.test2"]},
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["data"] == {
+        CONF_FRIENDLY_NAME: "Test Name",
+        CONF_ENTITIES: {
+            "light.test1": {CONF_BRIGHTNESS: dict(DEFAULT_BRIGHTNESS)},
+            "light.test2": {CONF_BRIGHTNESS: dict(DEFAULT_BRIGHTNESS)},
+        },
+    }
+
+
+async def test_options_flow_preserves_existing_curves(hass: HomeAssistant) -> None:
+    """Test that the options flow preserves existing curves and assigns defaults to new lights."""
 
     entry = MockConfigEntry(
         domain="lightener",
@@ -75,7 +85,7 @@ async def test_options_flow_steps(hass: HomeAssistant) -> None:
         unique_id=str(uuid4()),
         data={
             CONF_ENTITIES: {
-                "light.test1": {CONF_BRIGHTNESS: {"10": "20"}},
+                "light.test1": {CONF_BRIGHTNESS: {"10": "20", "80": "90"}},
                 "light.test2": {CONF_BRIGHTNESS: {"30": "40"}},
             }
         },
@@ -86,24 +96,14 @@ async def test_options_flow_steps(hass: HomeAssistant) -> None:
 
     assert result["type"] == "form"
     assert result["step_id"] == "init"
-    assert result["last_step"] is False
+    assert result["last_step"] is True
 
     assert get_default(result, "controlled_entities") == ["light.test1", "light.test2"]
 
+    # Keep test1 (existing curves preserved), drop test2, add test3 (gets defaults)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        user_input={"controlled_entities": ["light.test1"]},
-    )
-
-    assert result["type"] == "form"
-    assert result["step_id"] == "light_configuration"
-    assert result["last_step"] is True
-
-    assert get_suggested(result, "brightness") == "10: 20"
-
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"],
-        user_input={"brightness": "50:60"},
+        user_input={"controlled_entities": ["light.test1", "light.test3"]},
     )
 
     assert result["type"] == "create_entry"
@@ -111,9 +111,11 @@ async def test_options_flow_steps(hass: HomeAssistant) -> None:
     assert result["data"] == {}
 
     assert dict(entry.data) == {
-        CONF_ENTITIES: {"light.test1": {CONF_BRIGHTNESS: {"50": "60"}}}
+        CONF_ENTITIES: {
+            "light.test1": {CONF_BRIGHTNESS: {"10": "20", "80": "90"}},
+            "light.test3": {CONF_BRIGHTNESS: dict(DEFAULT_BRIGHTNESS)},
+        }
     }
-
     assert entry.options == {}
 
 
@@ -143,7 +145,7 @@ async def test_step_lights_no_lightener(hass: HomeAssistant) -> None:
 
 
 async def test_step_lights_error_no_selection(hass: HomeAssistant) -> None:
-    """Test if the list of lights to select doesn't include the lightener being configured."""
+    """Test that submitting with no lights selected shows an error."""
 
     result = await hass.config_entries.flow.async_init(
         const.DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -161,96 +163,6 @@ async def test_step_lights_error_no_selection(hass: HomeAssistant) -> None:
     assert result["errors"]["controlled_entities"] == "controlled_entities_empty"
 
 
-async def test_step_light_configuration_multiple_lights(hass: HomeAssistant) -> None:
-    """Test if the flow works when multiple lights are selected."""
-
-    result = await hass.config_entries.flow.async_init(
-        const.DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], user_input={"name": "Test Name"}
-    )
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        user_input={"controlled_entities": ["light.test1", "light.test2"]},
-    )
-
-    assert result["step_id"] == "light_configuration"
-    assert result["last_step"] is False
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        user_input={"brightness": "50:60"},
-    )
-
-    assert result["step_id"] == "light_configuration"
-    assert result["last_step"] is True
-
-
-async def test_step_light_configuration_brightness_validation(
-    hass: HomeAssistant,
-) -> None:
-    """Test the input validation of the brightness field."""
-
-    async def assert_value(must_pass, value, error_value=None):
-        result = await hass.config_entries.flow.async_init(
-            const.DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], user_input={"name": "Test Name"}
-        )
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            user_input={"controlled_entities": ["light.test1"]},
-        )
-
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            user_input={"brightness": value},
-        )
-
-        if must_pass is True:
-            assert result["type"] == "create_entry", (
-                f"{value} => '{result['description_placeholders']['error_entry']}'"
-            )
-        else:
-            assert result["errors"]["brightness"] == "invalid_brightness", value
-            assert (
-                result["description_placeholders"]["error_entry"] == value
-                or error_value
-            ), value
-
-    # Wrong format
-    await assert_value(False, "50:60x")
-    await assert_value(False, "x50:60")
-    await assert_value(False, "x50:60")
-    await assert_value(False, "50-60")
-    await assert_value(False, "50=60x")
-    await assert_value(False, "50 60x")
-    await assert_value(False, "-50:-60")
-    await assert_value(False, "bla")
-    await assert_value(False, "10: 20\n50:60x", "50:60x")
-
-    # Wrong values
-    await assert_value(False, "0:50")
-    await assert_value(False, "101:50")
-    await assert_value(False, "50:101")
-
-    # Good ones
-    await assert_value(True, "1:0")  # Lowest values
-    await assert_value(True, "100:100")  # Highest values
-    await assert_value(True, "50:60")
-    await assert_value(True, " 50:60")
-    await assert_value(True, "   50    :     60     ")
-    await assert_value(True, "50:60 ")
-    await assert_value(True, "50 : 60")
-    await assert_value(True, "50: 60")
-    await assert_value(True, "50 :60")
-    await assert_value(True, "50 :60\n   10: 20    \n30:40")
-    await assert_value(True, "")
-
-
 def get_default(form: FlowResult, key: str) -> Any:
     """Get default value for key in voluptuous schema."""
 
@@ -263,23 +175,8 @@ def get_default(form: FlowResult, key: str) -> Any:
     raise KeyError(f"Key '{key}' not found")
 
 
-def get_suggested(form: FlowResult, key: str) -> Any:
-    """Get default value for key in voluptuous schema."""
-
-    for schema_key in form["data_schema"].schema:
-        if schema_key == key:
-            if (
-                schema_key.description is None
-                or "suggested_value" not in schema_key.description
-            ):
-                return None
-            return schema_key.description["suggested_value"]
-
-    raise KeyError(f"Key '{key}' not found")
-
-
 def get_required(form: FlowResult, key: str) -> Any:
-    """Get default value for key in voluptuous schema."""
+    """Return True if the given key is vol.Required in the form schema."""
 
     for schema_key in form["data_schema"].schema:
         if schema_key == key:
