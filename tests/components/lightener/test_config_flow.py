@@ -13,7 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lightener import const
 from custom_components.lightener.config_flow import LightenerConfigFlow
-from custom_components.lightener.const import DEFAULT_BRIGHTNESS
+from custom_components.lightener.const import CURVE_PRESETS, DEFAULT_BRIGHTNESS
 
 
 async def test_config_flow_steps(hass: HomeAssistant) -> None:
@@ -76,6 +76,32 @@ async def test_config_flow_multiple_lights(hass: HomeAssistant) -> None:
     }
 
 
+async def test_config_flow_applies_selected_preset_to_new_lights(
+    hass: HomeAssistant,
+) -> None:
+    """Test config flow applies selected preset to newly configured lights."""
+
+    result = await hass.config_entries.flow.async_init(
+        const.DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={"name": "Preset Test"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            "controlled_entities": ["light.test1", "light.test2"],
+            "curve_preset": "night_mode",
+        },
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_ENTITIES] == {
+        "light.test1": {CONF_BRIGHTNESS: dict(CURVE_PRESETS["night_mode"])},
+        "light.test2": {CONF_BRIGHTNESS: dict(CURVE_PRESETS["night_mode"])},
+    }
+
+
 async def test_options_flow_preserves_existing_curves(hass: HomeAssistant) -> None:
     """Test that the options flow preserves existing curves and assigns defaults to new lights."""
 
@@ -103,7 +129,10 @@ async def test_options_flow_preserves_existing_curves(hass: HomeAssistant) -> No
     # Keep test1 (existing curves preserved), drop test2, add test3 (gets defaults)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        user_input={"controlled_entities": ["light.test1", "light.test3"]},
+        user_input={
+            "controlled_entities": ["light.test1", "light.test3"],
+            "curve_preset": "linear",
+        },
     )
 
     assert result["type"] == "create_entry"
@@ -117,6 +146,39 @@ async def test_options_flow_preserves_existing_curves(hass: HomeAssistant) -> No
         }
     }
     assert entry.options == {}
+
+
+async def test_options_flow_applies_preset_only_to_new_lights(
+    hass: HomeAssistant,
+) -> None:
+    """Test options flow keeps existing curves and uses preset for added lights."""
+
+    entry = MockConfigEntry(
+        domain="lightener",
+        version=LightenerConfigFlow.VERSION,
+        unique_id=str(uuid4()),
+        data={
+            CONF_ENTITIES: {
+                "light.test1": {CONF_BRIGHTNESS: {"10": "20", "80": "90"}},
+            }
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "controlled_entities": ["light.test1", "light.test2"],
+            "curve_preset": "late_starter",
+        },
+    )
+
+    assert result["type"] == "create_entry"
+    assert dict(entry.data)[CONF_ENTITIES] == {
+        "light.test1": {CONF_BRIGHTNESS: {"10": "20", "80": "90"}},
+        "light.test2": {CONF_BRIGHTNESS: dict(CURVE_PRESETS["late_starter"])},
+    }
 
 
 async def test_step_lights_no_lightener(hass: HomeAssistant) -> None:

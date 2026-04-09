@@ -59,6 +59,11 @@ type: custom:lightener-curve-card
 entity: light.your_lightener_device
 ```
 
+### Sidebar Panel
+
+This fork also registers a dedicated sidebar panel at `/lightener-editor` named **Lightener Editor**.  
+Use it to pick a Lightener entity and edit curves without manually adding a dashboard card first.
+
 ## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md) — release history

@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_registry import (
 )
 from homeassistant.helpers.selector import selector
 
-from .const import DEFAULT_BRIGHTNESS, DOMAIN
+from .const import CURVE_PRESETS, DEFAULT_BRIGHTNESS, DEFAULT_CURVE_PRESET, DOMAIN
 
 
 class LightenerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -82,6 +82,11 @@ class LightenerFlow:
         self.data = {} if config_entry is None else config_entry.data.copy()
         self.steps = steps
 
+    @staticmethod
+    def _get_preset_curve(preset_id: str) -> dict[str, str]:
+        """Return curve for the selected preset."""
+        return dict(CURVE_PRESETS.get(preset_id, DEFAULT_BRIGHTNESS))
+
     async def async_step_name(self, user_input: dict[str, Any] | None = None):
         """Configure the lightener device name."""
 
@@ -131,6 +136,8 @@ class LightenerFlow:
 
         if user_input is not None:
             selected = user_input.get("controlled_entities")
+            selected_preset = user_input.get("curve_preset", DEFAULT_CURVE_PRESET)
+            preset_curve = self._get_preset_curve(selected_preset)
 
             if not selected:
                 errors["controlled_entities"] = "controlled_entities_empty"
@@ -145,10 +152,8 @@ class LightenerFlow:
                         # Deep-copy to avoid mutating the live config proxy
                         entities[entity_id] = dict(existing_entities[entity_id])
                     else:
-                        # New light — assign default linear curve
-                        entities[entity_id] = {
-                            CONF_BRIGHTNESS: dict(DEFAULT_BRIGHTNESS)
-                        }
+                        # New light — assign selected preset curve.
+                        entities[entity_id] = {CONF_BRIGHTNESS: dict(preset_curve)}
 
                 self.data[CONF_ENTITIES] = entities
                 return await self.async_save_data()
@@ -168,7 +173,24 @@ class LightenerFlow:
                                 "exclude_entities": lightener_entities,
                             }
                         }
-                    )
+                    ),
+                    vol.Optional(
+                        "curve_preset", default=DEFAULT_CURVE_PRESET
+                    ): selector(
+                        {
+                            "select": {
+                                "options": [
+                                    {"value": "linear", "label": "Linear"},
+                                    {"value": "dim_accent", "label": "Dim accent"},
+                                    {
+                                        "value": "late_starter",
+                                        "label": "Late starter",
+                                    },
+                                    {"value": "night_mode", "label": "Night mode"},
+                                ]
+                            }
+                        }
+                    ),
                 }
             ),
             errors=errors,

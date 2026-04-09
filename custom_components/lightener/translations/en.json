@@ -13,9 +13,13 @@
       },
       "lights": {
         "title": "Controlled lights",
-        "description": "New lights start with a linear brightness curve. To customize curves visually, add the **Lightener Curve Editor** card to your dashboard after setup.",
+        "description": "Choose your lights and a starter curve preset. Existing/new curves can be fine-tuned visually in the **Lightener Editor** sidebar panel (`/lightener-editor`) or the **Lightener Curve Editor** dashboard card after setup.",
         "data": {
-          "controlled_entities": "Select the light entities to be controlled by this Lightener device"
+          "controlled_entities": "Select the light entities to be controlled by this Lightener device",
+          "curve_preset": "Starter curve preset for newly added lights"
+        },
+        "data_description": {
+          "curve_preset": "Applied only when adding new lights. Existing light curves are kept as-is."
         }
       }
     },
@@ -27,9 +31,13 @@
     "step": {
       "init": {
         "title": "Controlled lights",
-        "description": "Add or remove lights below. Existing brightness curves are preserved. To edit curves visually, use the **Lightener Curve Editor** card on your dashboard.",
+        "description": "Add or remove lights below and choose a starter preset for new lights. Existing brightness curves are preserved. For visual editing, use the **Lightener Editor** sidebar panel (`/lightener-editor`) or the **Lightener Curve Editor** card on your dashboard.",
         "data": {
-          "controlled_entities": "Select the light entities to be controlled by this Lightener device"
+          "controlled_entities": "Select the light entities to be controlled by this Lightener device",
+          "curve_preset": "Starter curve preset for newly added lights"
+        },
+        "data_description": {
+          "curve_preset": "Applied only to lights added in this step."
         }
       }
     },

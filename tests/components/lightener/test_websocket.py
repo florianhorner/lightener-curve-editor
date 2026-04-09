@@ -54,6 +54,28 @@ async def test_get_curves_returns_entities(hass: HomeAssistant, hass_ws_client) 
     assert result["result"]["entities"] == entities
 
 
+async def test_list_entities_returns_lightener_entities(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_list_entities returns only Lightener entities."""
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 100,
+            "type": "lightener/list_entities",
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is True
+    assert isinstance(result["result"]["entities"], list)
+    assert any(
+        item["entity_id"] == "light.test" for item in result["result"]["entities"]
+    )
+
+
 async def test_get_curves_invalid_entity(hass: HomeAssistant, hass_ws_client) -> None:
     """Test ws_get_curves returns an error for a non-Lightener entity."""
     await _setup_lightener(hass)
@@ -145,6 +167,111 @@ async def test_save_curves_validates_range(hass: HomeAssistant, hass_ws_client) 
         }
     )
     result = await ws.receive_json()
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_format"
+
+
+async def test_save_curves_rejects_unknown_entities(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_save_curves rejects entity IDs not in the config entry."""
+    await _setup_lightener(
+        hass,
+        {
+            "light.test1": {
+                "brightness": {"60": "100"},
+            },
+        },
+    )
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/save_curves",
+            "entity_id": "light.test",
+            "curves": {
+                "light.unknown_entity": {
+                    "brightness": {"50": "80"},
+                },
+            },
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "unknown_entities"
+
+
+async def test_save_curves_rejects_non_dict_entity_payload(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_save_curves rejects non-dict entity payloads."""
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/save_curves",
+            "entity_id": "light.test",
+            "curves": {
+                "light.test1": "not_a_dict",
+            },
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_format"
+
+
+async def test_save_curves_rejects_non_dict_brightness(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_save_curves rejects non-dict brightness payloads."""
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/save_curves",
+            "entity_id": "light.test",
+            "curves": {
+                "light.test1": {
+                    "brightness": "not_a_dict",
+                },
+            },
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_format"
+
+
+async def test_save_curves_rejects_non_numeric_values(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_save_curves rejects non-numeric brightness keys/values."""
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/save_curves",
+            "entity_id": "light.test",
+            "curves": {
+                "light.test1": {
+                    "brightness": {"abc": "50"},
+                },
+            },
+        }
+    )
+    result = await ws.receive_json()
+
     assert result["success"] is False
     assert result["error"]["code"] == "invalid_format"
 

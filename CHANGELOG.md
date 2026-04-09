@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Visual card configuration editor (`lightener-curve-card-editor`) with Lightener entity picker and optional custom title
 - `DEFAULT_BRIGHTNESS` constant in `const.py` for consistent default curves across config flow and light platform
+- Built-in config-flow curve presets (`linear`, `dim_accent`, `late_starter`, `night_mode`) for onboarding without manual curve authoring
+- Dedicated Home Assistant sidebar panel (`/lightener-editor`) that hosts the curve editor without requiring manual dashboard card setup
+- New `lightener/list_entities` websocket API for panel entity discovery
 - Undo support for curve edits (footer undo button and Ctrl/Cmd+Z shortcut)
 - Shared graph math module (`graph-math.ts`) with geometry/interpolation helpers reused by graph and scrubber
 - 44 new Vitest unit tests (`card-logic.test.ts` and `graph-math.test.ts`) covering undo flow, interaction guards, and curve math
@@ -19,7 +22,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Config flow simplified: name your device, pick lights, done — no more text-based brightness mapping
 - Options flow simplified: add or remove lights in one step; existing brightness curves are preserved
+- Config and options flows now include a starter curve preset selector; selected preset is applied to newly added lights only
 - Both flows now guide users to the Lightener Curve Editor card for visual curve editing
+- Flow descriptions now point to both the sidebar panel and dashboard card for visual editing
 - Scrubber now emits position events and stays in sync with the graph, including a vertical guide and per-curve value dots
 - Curve legend shape markers now use shared constants from graph math utilities for consistent rendering
 - Graph and scrubber now sample values through the same smooth-curve interpolation path for consistent badge and graph readouts
@@ -32,6 +37,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Removed a duplicated interpolation code path so graph and scrubber value sampling no longer drift from each other
 - Mobile editing behavior now supports long-press point removal while preserving drag interactions
+- Undo/cancel animations now preserve each curve's live visibility state instead of restoring stale visibility from snapshots
+- Global keyboard shortcuts are now scoped to the card focus context, avoiding accidental save/undo/cancel when focus is outside the card
+- WebSocket curve saves now reject unknown entities and malformed per-entity brightness payload shapes
+- Release workflow now injects tag version via shell env expansion so manifest version updates resolve reliably
+- Integration setup now tolerates sidebar panel registration failures without blocking startup
 
 ## [2.9.0] - 2026-04-06
 
