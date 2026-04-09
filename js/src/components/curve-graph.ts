@@ -1,5 +1,5 @@
-import { LitElement, html, css, svg, nothing, PropertyValues } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { LitElement, html, css, svg, nothing } from 'lit';
+import { customElement, property, query, state } from 'lit/decorators.js';
 import { LightCurve, ControlPoint } from '../utils/types.js';
 import { prepareBrightnessConfig } from '../utils/interpolation.js';
 import {
@@ -155,7 +155,7 @@ export class CurveGraph extends LitElement {
     }
   `;
 
-  private _svgRef: SVGSVGElement | null = null;
+  @query('svg') private _svgRef!: SVGSVGElement | null;
 
   private _getSvgCoords(e: MouseEvent): { x: number; y: number } | null {
     const svgEl = this._svgRef;
@@ -549,9 +549,8 @@ export class CurveGraph extends LitElement {
     }
   }
 
-  protected firstUpdated(_changedProperties: PropertyValues): void {
-    this._svgRef = this.renderRoot.querySelector('svg');
-  }
+  // _svgRef is now a @query decorator — always resolves to the live SVG node.
+  // No firstUpdated override needed.
 
   disconnectedCallback(): void {
     super.disconnectedCallback();

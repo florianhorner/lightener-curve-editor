@@ -32,6 +32,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Removed a duplicated interpolation code path so graph and scrubber value sampling no longer drift from each other
 - Mobile editing behavior now supports long-press point removal while preserving drag interactions
+- Undo/cancel animations now preserve each curve's live visibility state instead of restoring stale visibility from snapshots
+- Global keyboard shortcuts are now scoped to the card focus context, avoiding accidental save/undo/cancel when focus is outside the card
+- WebSocket curve saves now reject unknown entities and malformed per-entity brightness payload shapes
+- Release workflow now injects tag version via shell env expansion so manifest version updates resolve reliably
 
 ## [2.9.0] - 2026-04-06
 
