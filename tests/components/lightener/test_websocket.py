@@ -54,6 +54,28 @@ async def test_get_curves_returns_entities(hass: HomeAssistant, hass_ws_client) 
     assert result["result"]["entities"] == entities
 
 
+async def test_list_entities_returns_lightener_entities(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_list_entities returns only Lightener entities."""
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 100,
+            "type": "lightener/list_entities",
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is True
+    assert isinstance(result["result"]["entities"], list)
+    assert any(
+        item["entity_id"] == "light.test" for item in result["result"]["entities"]
+    )
+
+
 async def test_get_curves_invalid_entity(hass: HomeAssistant, hass_ws_client) -> None:
     """Test ws_get_curves returns an error for a non-Lightener entity."""
     await _setup_lightener(hass)

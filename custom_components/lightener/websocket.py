@@ -12,6 +12,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     """Register WebSocket commands."""
     websocket_api.async_register_command(hass, ws_get_curves)
     websocket_api.async_register_command(hass, ws_save_curves)
+    websocket_api.async_register_command(hass, ws_list_entities)
 
 
 @websocket_api.websocket_command(
@@ -48,6 +49,40 @@ def ws_get_curves(
 
     entities = config_entry.data.get("entities", {})
 
+    connection.send_result(msg["id"], {"entities": entities})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "lightener/list_entities",
+    }
+)
+@callback
+def ws_list_entities(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict,
+) -> None:
+    """Return all Lightener light entities."""
+    entity_registry = async_get_entity_registry(hass)
+    entities = []
+
+    for entry in entity_registry.entities.values():
+        if entry.platform != DOMAIN or entry.domain != "light":
+            continue
+
+        state = hass.states.get(entry.entity_id)
+        friendly_name = (
+            state.attributes.get("friendly_name")
+            if state is not None
+            else entry.original_name or entry.entity_id
+        )
+
+        entities.append(
+            {"entity_id": entry.entity_id, "name": friendly_name or entry.entity_id}
+        )
+
+    entities.sort(key=lambda item: item["name"])
     connection.send_result(msg["id"], {"entities": entities})
 
 

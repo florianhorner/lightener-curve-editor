@@ -29,21 +29,35 @@ async def test_async_setup_registers_websocket_and_static_path(
     hass.http = MagicMock()
     hass.http.async_register_static_paths = AsyncMock()
 
-    with patch(
-        "custom_components.lightener.websocket.async_register_commands"
-    ) as register_commands:
+    with (
+        patch(
+            "custom_components.lightener.websocket.async_register_commands"
+        ) as register_commands,
+        patch(
+            "homeassistant.components.frontend.async_register_built_in_panel"
+        ) as register_panel,
+    ):
         assert await async_setup(hass, {}) is True
 
     register_commands.assert_called_once_with(hass)
     hass.http.async_register_static_paths.assert_awaited_once()
+    register_panel.assert_called_once()
 
     paths = hass.http.async_register_static_paths.await_args.args[0]
-    assert len(paths) == 1
+    assert len(paths) == 2
     assert paths[0].url_path == "/lightener/lightener-curve-card.js"
     assert paths[0].path.endswith(
         "/custom_components/lightener/frontend/lightener-curve-card.js"
     )
     assert paths[0].cache_headers is False
+    assert paths[1].url_path == "/lightener/lightener-panel.js"
+    assert paths[1].path.endswith(
+        "/custom_components/lightener/frontend/lightener-panel.js"
+    )
+    assert paths[1].cache_headers is False
+
+    assert register_panel.call_args.args[1] == "custom"
+    assert register_panel.call_args.kwargs["frontend_url_path"] == "lightener-editor"
 
 
 async def test_async_setup_continues_when_static_path_registration_fails(
@@ -61,6 +75,30 @@ async def test_async_setup_continues_when_static_path_registration_fails(
 
     register_commands.assert_called_once_with(hass)
     hass.http.async_register_static_paths.assert_awaited_once()
+
+
+async def test_async_setup_continues_when_panel_registration_fails(
+    hass: HomeAssistant,
+) -> None:
+    """Test integration setup succeeds even if panel registration fails."""
+
+    hass.http = MagicMock()
+    hass.http.async_register_static_paths = AsyncMock()
+
+    with (
+        patch(
+            "custom_components.lightener.websocket.async_register_commands"
+        ) as register_commands,
+        patch(
+            "homeassistant.components.frontend.async_register_built_in_panel",
+            side_effect=RuntimeError,
+        ) as register_panel,
+    ):
+        assert await async_setup(hass, {}) is True
+
+    register_commands.assert_called_once_with(hass)
+    hass.http.async_register_static_paths.assert_awaited_once()
+    register_panel.assert_called_once()
 
 
 async def test_async_setup_continues_when_http_component_is_unavailable(

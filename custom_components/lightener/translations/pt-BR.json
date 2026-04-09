@@ -13,9 +13,13 @@
       },
       "lights": {
         "title": "Luzes controladas",
-        "description": "Novas luzes começam com uma curva de brilho linear. Para personalizar curvas visualmente, adicione o cartão **Lightener Curve Editor** ao seu painel após a configuração.",
+        "description": "Escolha suas luzes e um preset inicial de curva. Curvas existentes/novas podem ser ajustadas visualmente no painel lateral **Lightener Editor** (`/lightener-editor`) ou no cartão **Lightener Curve Editor** após a configuração.",
         "data": {
-          "controlled_entities": "Selecione as entidades de luz a serem controladas por este dispositivo Lightener"
+          "controlled_entities": "Selecione as entidades de luz a serem controladas por este dispositivo Lightener",
+          "curve_preset": "Preset inicial de curva para luzes adicionadas"
+        },
+        "data_description": {
+          "curve_preset": "Aplicado somente ao adicionar novas luzes. As curvas existentes são mantidas."
         }
       }
     },
@@ -27,9 +31,13 @@
     "step": {
       "init": {
         "title": "Luzes controladas",
-        "description": "Adicione ou remova luzes abaixo. As curvas de brilho existentes são preservadas. Para editar curvas visualmente, use o cartão **Lightener Curve Editor** no seu painel.",
+        "description": "Adicione ou remova luzes abaixo e escolha um preset inicial para novas luzes. As curvas de brilho existentes são preservadas. Para editar visualmente, use o painel lateral **Lightener Editor** (`/lightener-editor`) ou o cartão **Lightener Curve Editor** no seu painel.",
         "data": {
-          "controlled_entities": "Selecione as entidades de luz a serem controladas por este dispositivo Lightener"
+          "controlled_entities": "Selecione as entidades de luz a serem controladas por este dispositivo Lightener",
+          "curve_preset": "Preset inicial de curva para luzes adicionadas"
+        },
+        "data_description": {
+          "curve_preset": "Aplicado somente às luzes adicionadas nesta etapa."
         }
       }
     },

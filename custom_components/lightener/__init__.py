@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntry
 
 from .config_flow import LightenerConfigFlow
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     websocket.async_register_commands(hass)
 
-    # Serve the frontend card JS.
+    # Serve the frontend card and panel JS.
     # hass.http is unavailable during tests and StaticPathConfig may not
     # exist in older HA versions, so guard both the import and the call.
     try:
@@ -41,11 +42,38 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                             / "lightener-curve-card.js"
                         ),
                         cache_headers=False,
-                    )
+                    ),
+                    StaticPathConfig(
+                        "/lightener/lightener-panel.js",
+                        str(Path(__file__).parent / "frontend" / "lightener-panel.js"),
+                        cache_headers=False,
+                    ),
                 ]
             )
     except Exception:
-        _LOGGER.debug("Could not register static paths for frontend card")
+        _LOGGER.debug("Could not register static paths for frontend assets")
+
+    # Register a dedicated sidebar panel for visual curve editing.
+    try:
+        from homeassistant.components import frontend
+
+        frontend.async_register_built_in_panel(
+            hass,
+            "custom",
+            sidebar_title="Lightener Editor",
+            sidebar_icon="mdi:chart-bell-curve-cumulative",
+            frontend_url_path="lightener-editor",
+            config={
+                "name": "lightener-editor-panel",
+                "module_url": "/lightener/lightener-panel.js",
+                # Backward-compatible key for older custom panel handling.
+                "js_url": "/lightener/lightener-panel.js",
+            },
+            require_admin=False,
+            config_panel_domain=DOMAIN,
+        )
+    except Exception:
+        _LOGGER.debug("Could not register Lightener editor panel")
 
     return True
 

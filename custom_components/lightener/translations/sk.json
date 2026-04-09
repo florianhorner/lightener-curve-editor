@@ -13,9 +13,13 @@
       },
       "lights": {
         "title": "Ovládané svetlá",
-        "description": "Nové svetlá začínajú s lineárnou krivkou jasu. Na vizuálnu úpravu kriviek pridajte kartu **Lightener Curve Editor** na váš panel po nastavení.",
+        "description": "Vyberte svetlá a počiatočnú predvoľbu krivky. Existujúce/nové krivky môžete po nastavení doladiť vizuálne v bočnom paneli **Lightener Editor** (`/lightener-editor`) alebo v karte **Lightener Curve Editor**.",
         "data": {
-          "controlled_entities": "Vyberte svetelné entity, ktoré chcete ovládať týmto zariadením Lightener"
+          "controlled_entities": "Vyberte svetelné entity, ktoré chcete ovládať týmto zariadením Lightener",
+          "curve_preset": "Počiatočná predvoľba krivky pre novo pridané svetlá"
+        },
+        "data_description": {
+          "curve_preset": "Použije sa iba pri pridávaní nových svetiel. Existujúce krivky zostanú zachované."
         }
       }
     },
@@ -27,9 +31,13 @@
     "step": {
       "init": {
         "title": "Ovládané svetlá",
-        "description": "Pridajte alebo odoberte svetlá nižšie. Existujúce krivky jasu sú zachované. Na vizuálnu úpravu kriviek použite kartu **Lightener Curve Editor** na vašom paneli.",
+        "description": "Nižšie pridajte alebo odstráňte svetlá a vyberte počiatočnú predvoľbu pre nové svetlá. Existujúce krivky jasu zostanú zachované. Na vizuálne úpravy použite bočný panel **Lightener Editor** (`/lightener-editor`) alebo kartu **Lightener Curve Editor** na paneli.",
         "data": {
-          "controlled_entities": "Vyberte svetelné entity, ktoré chcete ovládať týmto zariadením Lightener"
+          "controlled_entities": "Vyberte svetelné entity, ktoré chcete ovládať týmto zariadením Lightener",
+          "curve_preset": "Počiatočná predvoľba krivky pre novo pridané svetlá"
+        },
+        "data_description": {
+          "curve_preset": "Použije sa iba na svetlá pridané v tomto kroku."
         }
       }
     },
