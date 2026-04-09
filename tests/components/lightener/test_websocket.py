@@ -149,6 +149,111 @@ async def test_save_curves_validates_range(hass: HomeAssistant, hass_ws_client) 
     assert result["error"]["code"] == "invalid_format"
 
 
+async def test_save_curves_rejects_unknown_entities(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_save_curves rejects entity IDs not in the config entry."""
+    await _setup_lightener(
+        hass,
+        {
+            "light.test1": {
+                "brightness": {"60": "100"},
+            },
+        },
+    )
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/save_curves",
+            "entity_id": "light.test",
+            "curves": {
+                "light.unknown_entity": {
+                    "brightness": {"50": "80"},
+                },
+            },
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "unknown_entities"
+
+
+async def test_save_curves_rejects_non_dict_entity_payload(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_save_curves rejects non-dict entity payloads."""
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/save_curves",
+            "entity_id": "light.test",
+            "curves": {
+                "light.test1": "not_a_dict",
+            },
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_format"
+
+
+async def test_save_curves_rejects_non_dict_brightness(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_save_curves rejects non-dict brightness payloads."""
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/save_curves",
+            "entity_id": "light.test",
+            "curves": {
+                "light.test1": {
+                    "brightness": "not_a_dict",
+                },
+            },
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_format"
+
+
+async def test_save_curves_rejects_non_numeric_values(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Test ws_save_curves rejects non-numeric brightness keys/values."""
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/save_curves",
+            "entity_id": "light.test",
+            "curves": {
+                "light.test1": {
+                    "brightness": {"abc": "50"},
+                },
+            },
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_format"
+
+
 async def test_save_curves_requires_admin(
     hass: HomeAssistant, hass_ws_client, hass_admin_user
 ) -> None:

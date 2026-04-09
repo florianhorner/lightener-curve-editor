@@ -419,6 +419,10 @@ export class LightenerCurveCard extends LitElement {
   }
 
   private _onKeyDown(e: KeyboardEvent): void {
+    // Only handle shortcuts when focus is inside this card (or nothing specific is focused)
+    const focused = document.activeElement;
+    if (focused && focused !== this && focused !== document.body && !this.contains(focused)) return;
+
     // Ctrl+S / Cmd+S to save
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       if (this._isDirty && this._isAdmin && !this._saving) {
@@ -567,7 +571,8 @@ export class LightenerCurveCard extends LitElement {
         }
 
         points.sort((a, b) => a.lightener - b.lightener);
-        return { ...endCurve, controlPoints: points };
+        // Preserve live visible state — don't restore from snapshot
+        return { ...endCurve, controlPoints: points, visible: startCurve.visible };
       });
 
       this._curves = interpolated;
@@ -575,7 +580,11 @@ export class LightenerCurveCard extends LitElement {
       if (rawT < 1) {
         this._cancelAnimFrame = requestAnimationFrame(tick);
       } else {
-        this._curves = cloneCurves(endCurves);
+        // Preserve live visible state on final frame too
+        this._curves = endCurves.map((ec, i) => ({
+          ...ec,
+          visible: startCurves[i]?.visible ?? ec.visible,
+        }));
         this._cancelAnimating = false;
         this._cancelAnimFrame = null;
         onComplete?.();

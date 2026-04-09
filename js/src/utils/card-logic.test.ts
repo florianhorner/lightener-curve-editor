@@ -469,6 +469,113 @@ describe('cancel animation interpolation', () => {
   });
 });
 
+// ── Bug fix: undo/cancel must preserve visible state ─────────────
+
+describe('undo preserves visible state', () => {
+  function animateCurvesTo(currentCurves: LightCurve[], endCurves: LightCurve[]): LightCurve[] {
+    // Simulates the final frame of _animateCurvesTo (t=1) with the fix applied
+    const startCurves = cloneCurves(currentCurves);
+    return endCurves.map((ec, i) => ({
+      ...ec,
+      visible: startCurves[i]?.visible ?? ec.visible,
+    }));
+  }
+
+  it('undo does not unhide a curve the user hid', () => {
+    const curves = [
+      makeCurve({ entityId: 'light.a', visible: false }),
+      makeCurve({ entityId: 'light.b', visible: true }),
+    ];
+    // Undo snapshot was taken when both were visible
+    const snapshot = [
+      makeCurve({ entityId: 'light.a', visible: true }),
+      makeCurve({ entityId: 'light.b', visible: true }),
+    ];
+    const result = animateCurvesTo(curves, snapshot);
+    // light.a should stay hidden despite snapshot saying visible
+    expect(result[0].visible).toBe(false);
+    expect(result[1].visible).toBe(true);
+  });
+
+  it('cancel does not unhide a curve the user hid', () => {
+    const curves = [
+      makeCurve({ entityId: 'light.a', visible: true }),
+      makeCurve({ entityId: 'light.b', visible: false }),
+    ];
+    const original = [
+      makeCurve({ entityId: 'light.a', visible: true }),
+      makeCurve({ entityId: 'light.b', visible: true }),
+    ];
+    const result = animateCurvesTo(curves, original);
+    expect(result[1].visible).toBe(false);
+  });
+
+  it('restores control points from snapshot while keeping visible', () => {
+    const curves = [
+      makeCurve({
+        entityId: 'light.a',
+        visible: false,
+        controlPoints: [
+          { lightener: 0, target: 0 },
+          { lightener: 50, target: 99 },
+          { lightener: 100, target: 100 },
+        ],
+      }),
+    ];
+    const snapshot = [
+      makeCurve({
+        entityId: 'light.a',
+        visible: true,
+        controlPoints: [
+          { lightener: 0, target: 0 },
+          { lightener: 50, target: 75 },
+          { lightener: 100, target: 100 },
+        ],
+      }),
+    ];
+    const result = animateCurvesTo(curves, snapshot);
+    // Control points restored from snapshot
+    expect(result[0].controlPoints[1].target).toBe(75);
+    // Visible preserved from current
+    expect(result[0].visible).toBe(false);
+  });
+});
+
+// ── Bug fix: keyboard shortcut focus scoping ─────────────────────
+
+describe('keyboard shortcut focus guard', () => {
+  function shouldHandleKey(
+    focusedElement: { isSelf: boolean; isBody: boolean; isContained: boolean } | null
+  ): boolean {
+    // Replicates the guard logic from _onKeyDown
+    if (!focusedElement) return true;
+    if (focusedElement.isSelf) return true;
+    if (focusedElement.isBody) return true;
+    if (focusedElement.isContained) return true;
+    return false;
+  }
+
+  it('handles keys when nothing is focused', () => {
+    expect(shouldHandleKey(null)).toBe(true);
+  });
+
+  it('handles keys when card itself is focused', () => {
+    expect(shouldHandleKey({ isSelf: true, isBody: false, isContained: false })).toBe(true);
+  });
+
+  it('handles keys when body is focused (no specific focus)', () => {
+    expect(shouldHandleKey({ isSelf: false, isBody: true, isContained: false })).toBe(true);
+  });
+
+  it('handles keys when child of card is focused', () => {
+    expect(shouldHandleKey({ isSelf: false, isBody: false, isContained: true })).toBe(true);
+  });
+
+  it('ignores keys when external element is focused', () => {
+    expect(shouldHandleKey({ isSelf: false, isBody: false, isContained: false })).toBe(false);
+  });
+});
+
 // ── Mock curves factory ───────────────────────────────────────────
 
 describe('mock curves factory', () => {
