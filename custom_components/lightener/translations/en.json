@@ -2,47 +2,59 @@
   "config": {
     "step": {
       "user": {
-        "title": "Create a Lightener device",
-        "description": "Please provide a name for the Lightener device you are creating",
+        "title": "New Lightener device",
+        "description": "",
         "data": {
-          "name": "Device name"
+          "name": "Name"
         },
         "data_description": {
-          "name": "The purpose is to clearly indicate which group of lights is controlled by this device. Typically, it is an area or room name, such as \"Living Room,\" but it can be anything"
+          "name": "A room or area name works best, e.g. \"Living Room\""
         }
       },
       "lights": {
-        "title": "Controlled lights",
-        "description": "Choose your lights and a starter curve preset. Existing/new curves can be fine-tuned visually in the **Lightener Editor** sidebar panel (`/lightener-editor`) or the **Lightener Curve Editor** dashboard card after setup.",
+        "title": "Select lights",
         "data": {
-          "controlled_entities": "Select the light entities to be controlled by this Lightener device",
-          "curve_preset": "Starter curve preset for newly added lights"
+          "controlled_entities": "Lights to control"
+        }
+      },
+      "light_configuration": {
+        "title": "\"{light_name}\" brightness curve",
+        "description": "Currently: {current_brightness}",
+        "data": {
+          "brightness": "Brightness curve"
         },
         "data_description": {
-          "curve_preset": "Applied only when adding new lights. Existing light curves are kept as-is."
+          "brightness": "One mapping per line as group:light. Example: \"60:100\" means at 60% group brightness, \"{light_name}\" reaches 100%."
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Select at least one light"
+      "controlled_entities_empty": "Select at least one light",
+      "invalid_brightness": "Invalid entry \"{error_entry}\". Use the format \"X:Y\" where X is 1\u2013100 and Y is 0\u2013100, e.g. \"40:100\""
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Controlled lights",
-        "description": "Add or remove lights below and choose a starter preset for new lights. Existing brightness curves are preserved. For visual editing, use the **Lightener Editor** sidebar panel (`/lightener-editor`) or the **Lightener Curve Editor** card on your dashboard.",
+        "title": "Select lights",
         "data": {
-          "controlled_entities": "Select the light entities to be controlled by this Lightener device",
-          "curve_preset": "Starter curve preset for newly added lights"
+          "controlled_entities": "Lights to control"
+        }
+      },
+      "light_configuration": {
+        "title": "\"{light_name}\" brightness curve",
+        "description": "Currently: {current_brightness}",
+        "data": {
+          "brightness": "Brightness curve"
         },
         "data_description": {
-          "curve_preset": "Applied only to lights added in this step."
+          "brightness": "One mapping per line as group:light. Example: \"60:100\" means at 60% group brightness, \"{light_name}\" reaches 100%."
         }
       }
     },
     "error": {
-      "controlled_entities_empty": "Select at least one light"
+      "controlled_entities_empty": "Select at least one light",
+      "invalid_brightness": "Invalid entry \"{error_entry}\". Use the format \"X:Y\" where X is 1\u2013100 and Y is 0\u2013100, e.g. \"40:100\""
     }
   }
 }
