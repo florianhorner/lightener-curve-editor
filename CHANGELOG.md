@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Graph SVG reference now uses Lit `@query` decorator so drag and double-click work correctly if the graph panel unmounts and remounts during a loading cycle
 - Removed a duplicated interpolation code path so graph and scrubber value sampling no longer drift from each other
 - Mobile editing behavior now supports long-press point removal while preserving drag interactions
 - Undo/cancel animations now preserve each curve's live visibility state instead of restoring stale visibility from snapshots

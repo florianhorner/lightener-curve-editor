@@ -34,6 +34,7 @@ A visual editor for per-light brightness curves, directly in your HA dashboard �
 
 - `lightener/get_curves` — read brightness configs (all authenticated users)
 - `lightener/save_curves` — write brightness configs (admin only)
+- `lightener/list_entities` — list available Lightener entities (used by the sidebar panel)
 
 ### Upstream Status
 
@@ -116,28 +117,25 @@ To start, follow these steps in your Home Assistant installation:
 2. Click the "+ Add Integration" button.
 3. Search for and select the "Lightener" integration.
 
-This will initiate the configuration flow for a new Lightener light, which includes several steps:
+The setup flow has two steps:
 
-1. Give a name to your Lightener light. The name should make it easy for users to understand which lights are being controlled. For example, if you want to control several lights in the living room, you can name it "Living Room".
-2. Select the lights that you want to control.
-3. Configure each of the selected lights.
+1. Give a name to your Lightener light — something that reflects the space, like "Living Room".
+2. Select the lights you want to control, and pick a starting curve preset (Linear, Dim Accent, Late Starter, or Night Mode).
 
-### Light Configuration
+That's it. A new device is created immediately. Each light starts with the preset curve you chose.
 
-For each light to be controlled by a Lightener light, you must specify the mapping between the brightness intensity of both the controlling and the controlled lights. This is done by providing a list where each line defines a mapping step.
+### Editing Brightness Curves
 
-For example, in the previously presented use case, the configuration would be as follows (without the parentheses):
+After setup, use the **Lightener Editor** sidebar panel (`/lightener-editor`) or add a `custom:lightener-curve-card` to any dashboard to visually edit each light's brightness curve.
 
-- Main ceiling light
-  - **60: 0** (At 60% room brightness, the main ceiling light is still off)
-  - (100: 100 ... no need for this as it is the default for 100% room brightness)
-- Ceiling LEDs
-  - **80: 100** (At 80% room brightness, the LEDs will reach 100% brightness)
-- Sofa lamp
-  - **20: 0** (At 20% room brightness, the sofa light is still off)
-  - **60: 100** (At 60% room brightness, the sofa light reaches 100% brightness)
+The curve maps "group brightness %" to "this light's brightness %". For example, the curve for a sofa lamp might stay at zero until the room hits 20%, then ramp up to 100% by 60%. Drag the control points to shape the response — no number entry required.
 
-Note that we didn't have to define `40:50` for the LEDs, as the use case exemplifies. This is because the integration will automatically calculate the proper brightness for each step of the room brightness level. Since we configured `80:100`, at 40% room brightness, the LEDs will be at 50%, just like they'll be at 25% when the room reaches 20%, and so on.
+The conceptual rules still apply:
+
+- A light doesn't have to reach 100%. Shape its top end wherever you like.
+- Brightness can increase and then decrease — useful for accent lights that peak mid-range.
+- Setting a point to zero turns the light off at that group brightness level.
+- The rightmost point always defaults to 100:100 unless you change it.
 
 Once the configuration is confirmed, a new device becomes available, which can be used in the UI or in automations to control all the lights in the room at once.
 
