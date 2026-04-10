@@ -20,9 +20,11 @@ Contributing to this project should be as easy and transparent as possible, whet
 ```
 custom_components/lightener/   # Python — HA integration backend
   __init__.py                  # Integration setup, static file serving
-  config_flow.py               # Configuration UI flow
+  config_flow.py               # Configuration UI flow (name → lights + preset → done)
+  const.py                     # Constants, curve presets, domain config
   light.py                     # Virtual light platform + brightness mapping
-  websocket.py                 # WebSocket API (get_curves / save_curves)
+  websocket.py                 # WebSocket API (get_curves / save_curves / list_entities)
+  translations/                # HA config/options flow UI strings (en, de, sk, pt-BR)
   frontend/                    # Built JS bundle (committed, do not edit by hand)
 
 js/                            # TypeScript — Lit 3.x frontend card
