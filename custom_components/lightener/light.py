@@ -488,6 +488,7 @@ class LightenerLight(LightGroup):
                         continue
 
                     # Check if the entity state change is caused by this Lightener.
+                    # Always checked — independent of the levels early-exit below.
                     is_lightener_change = (
                         True
                         if is_lightener_change
@@ -497,6 +498,10 @@ class LightenerLight(LightGroup):
                             and state.context.id == self._context.id
                         )
                     )
+
+                    # Skip levels computation once we know there's no common level.
+                    if common_levels is not None and not common_levels:
+                        continue
 
                     if state.state == STATE_ON:
                         entity_brightness = state.attributes.get(ATTR_BRIGHTNESS, 255)
@@ -520,9 +525,6 @@ class LightenerLight(LightGroup):
                         common_levels = entity_levels
                     else:
                         common_levels.intersection_update(entity_levels)
-
-                    if not common_levels:
-                        break
 
             if common_levels:
                 # If the current lightener level is not present in the possible levels of the controlled lights.
