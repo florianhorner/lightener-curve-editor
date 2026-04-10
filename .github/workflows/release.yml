@@ -37,13 +37,15 @@ jobs:
           # HACS zip_release extracts directly into custom_components/<domain>/
           # Files MUST be at the zip root — no nested custom_components/ prefix.
           # A wrong structure silently breaks the integration ("Integration not found").
-          if unzip -l "${{ github.workspace }}/custom_components/lightener/lightener.zip" | grep -q "custom_components/"; then
+          ZIP_PATH="${{ github.workspace }}/custom_components/lightener/lightener.zip"
+          ZIP_ENTRIES="$(unzip -Z1 "${ZIP_PATH}")"
+          if printf '%s\n' "${ZIP_ENTRIES}" | grep -q '^custom_components/'; then
             echo "::error::ZIP contains nested custom_components/ path. HACS will extract this wrong."
             echo "Files in zip:"
-            unzip -l "${{ github.workspace }}/custom_components/lightener/lightener.zip"
+            unzip -l "${ZIP_PATH}"
             exit 1
           fi
-          if ! unzip -l "${{ github.workspace }}/custom_components/lightener/lightener.zip" | grep -q "manifest.json"; then
+          if ! printf '%s\n' "${ZIP_ENTRIES}" | grep -qx 'manifest.json'; then
             echo "::error::ZIP is missing manifest.json at root level."
             exit 1
           fi
