@@ -58,6 +58,12 @@ async def test_async_setup_registers_websocket_and_static_path(
 
     assert register_panel.call_args.args[1] == "custom"
     assert register_panel.call_args.kwargs["frontend_url_path"] == "lightener-editor"
+    panel_custom = register_panel.call_args.kwargs["config"]["_panel_custom"]
+    assert panel_custom["name"] == "lightener-editor-panel"
+    assert panel_custom["embed_iframe"] is False
+    assert panel_custom["trust_external"] is False
+    assert panel_custom["module_url"] == "/lightener/lightener-panel.js"
+    assert panel_custom["js_url"] == "/lightener/lightener-panel.js"
 
 
 async def test_async_setup_continues_when_static_path_registration_fails(
