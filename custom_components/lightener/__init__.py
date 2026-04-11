@@ -64,10 +64,14 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             sidebar_icon="mdi:chart-bell-curve-cumulative",
             frontend_url_path="lightener-editor",
             config={
-                "name": "lightener-editor-panel",
-                "module_url": "/lightener/lightener-panel.js",
-                # Backward-compatible key for older custom panel handling.
-                "js_url": "/lightener/lightener-panel.js",
+                "_panel_custom": {
+                    "name": "lightener-editor-panel",
+                    "embed_iframe": False,
+                    "trust_external": False,
+                    "module_url": "/lightener/lightener-panel.js",
+                    # Backward-compatible key for older custom panel handling.
+                    "js_url": "/lightener/lightener-panel.js",
+                }
             },
             require_admin=False,
             config_panel_domain=DOMAIN,

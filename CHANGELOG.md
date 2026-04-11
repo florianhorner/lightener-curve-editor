@@ -43,6 +43,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Release workflow now injects tag version via shell env expansion so manifest version updates resolve reliably
 - Integration setup now tolerates sidebar panel registration failures without blocking startup
 
+## [2.9.4] - 2026-04-11
+
+### Fixed
+
+- Fixed Lightener editor panel registration for newer Home Assistant frontend custom-panel loader expectations
+- Resolved blank page when opening Lightener `Configure` from Integrations (`/lightener-editor?config_entry=...`)
+
 ## [2.9.0] - 2026-04-06
 
 ### Added
