@@ -8,6 +8,10 @@ class LightenerEditorPanel extends HTMLElement {
     this._cardScriptPromise = null;
     this._lightenerEntities = null;
     this._loadingEntities = false;
+    this._requestedConfigEntryId = null;
+    try {
+      this._requestedConfigEntryId = new URLSearchParams(window.location.search).get("config_entry");
+    } catch (err) {}
   }
 
   set hass(hass) {
@@ -49,8 +53,16 @@ class LightenerEditorPanel extends HTMLElement {
   }
 
   _getEditorEntities() {
-    if (Array.isArray(this._lightenerEntities) && this._lightenerEntities.length) {
-      return this._lightenerEntities;
+    if (Array.isArray(this._lightenerEntities)) {
+      if (this._requestedConfigEntryId) {
+        return this._lightenerEntities.filter((entity) => entity.config_entry_id === this._requestedConfigEntryId);
+      }
+      if (this._lightenerEntities.length) {
+        return this._lightenerEntities;
+      }
+    }
+    if (this._requestedConfigEntryId) {
+      return [];
     }
     return this._getFallbackEntities();
   }
@@ -169,6 +181,20 @@ class LightenerEditorPanel extends HTMLElement {
           color: var(--primary-text-color);
           margin-bottom: 16px;
         }
+        button.open-editor {
+          margin-bottom: 16px;
+          min-height: 40px;
+          padding: 0 14px;
+          border: 0;
+          border-radius: 8px;
+          background: var(--primary-color);
+          color: var(--text-primary-color, #fff);
+          cursor: pointer;
+        }
+        button.open-editor[disabled] {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
         .hint {
           font-size: 0.9rem;
           margin-bottom: 16px;
@@ -184,20 +210,34 @@ class LightenerEditorPanel extends HTMLElement {
         <select id="entity-select" ${entities.length ? "" : "disabled"}>
           ${options}
         </select>
+        <button id="open-editor" class="open-editor" ${this._selectedEntity ? "" : "disabled"}>Open editor</button>
         ${
           entities.length
-            ? `<div class="hint">Select the Lightener group entity you want to edit.</div>`
-            : `<div class="error">No Lightener entities found.</div>`
+            ? `<div class="hint">Select the Lightener group entity and click Open editor.</div>`
+            : `<div class="error">${
+                this._requestedConfigEntryId
+                  ? "No Lightener entity found for this integration entry."
+                  : "No Lightener entities found."
+              }</div>`
         }
         <div id="card-mount"></div>
       </div>
     `;
 
     const select = this.shadowRoot.querySelector("#entity-select");
+    const openButton = this.shadowRoot.querySelector("#open-editor");
+    if (openButton) {
+      openButton.addEventListener("click", () => {
+        this._syncCard();
+      });
+    }
     if (select) {
       select.addEventListener("change", (ev) => {
         this._selectedEntity = ev.target.value;
         window.localStorage.setItem("lightener_editor_entity", this._selectedEntity);
+        if (openButton) {
+          openButton.disabled = !this._selectedEntity;
+        }
         this._syncCard();
       });
     }

@@ -43,6 +43,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Release workflow now injects tag version via shell env expansion so manifest version updates resolve reliably
 - Integration setup now tolerates sidebar panel registration failures without blocking startup
 
+## [2.9.5] - 2026-04-11
+
+### Fixed
+
+- Added an explicit `Open editor` action after entity selection in the Lightener sidebar panel
+- Improved panel routing for `/lightener-editor?config_entry=...` by scoping entity selection to the requested config entry
+- Extended `lightener/list_entities` websocket payload with `config_entry_id` for deterministic panel filtering
+
 ## [2.9.4] - 2026-04-11
 
 ### Fixed
