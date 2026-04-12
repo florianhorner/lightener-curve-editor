@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.12.0] - 2026-04-12
+
+### Added
+
+- Config flow: area filter step between name and light picker — select a room first to narrow 100+ lights down to the relevant subset on mobile
+- Config flow: mode descriptions on all four curve presets (Linear, Dim accent, Late starter, Night mode) shown as radio cards with plain-language explanations
+- Brightness preview: "Previewing live — release to restore original brightness" notice shown in the status area while the scrubber is held
+
+### Changed
+
+- Scrubber preview throttle increased from ~16ms (60fps RAF) to 300ms minimum interval, capping at ~3 commands/sec per light to prevent Zigbee/Matter/MQTT command backlog buildup
+- Graph hint text updated: "Select a light below — each gets its own curve" to clarify that curves are per-light
+
+### Fixed
+
+- SVG adds `user-select: none; -webkit-user-select: none` to prevent iOS from selecting text or triggering native gestures during long-press on control points
+
 ## [2.11.0] - 2026-04-12
 
 ### Added
