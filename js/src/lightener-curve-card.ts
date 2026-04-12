@@ -753,7 +753,8 @@ export class LightenerCurveCard extends LitElement {
   }
 
   private _applyPreset(preset: PresetDef): void {
-    if (this._cancelAnimating) return;
+    if (this._cancelAnimating || this._saving) return;
+    if (this._curves.length === 0) return;
     this._pushUndo();
     const pts = preset.controlPoints.map((cp) => ({ ...cp }));
     if (this._selectedCurveId !== null) {
@@ -1189,6 +1190,7 @@ export class LightenerCurveCard extends LitElement {
 
   private _onCancel(): void {
     if (this._cancelAnimating) return;
+    this._showPresets = false;
     this._undoStack = [];
     this._animateCurvesTo(cloneCurves(this._originalCurves), () => {
       this._selectedCurveId = null;
