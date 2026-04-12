@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.11.0] - 2026-04-12
+
+### Added
+
+- Embedded workspace layout: 2-column grid (graph+scrubber | legend+footer) when the curve card is hosted in the editor panel, single-column stack on narrow screens
+- "Lights" section label on the legend component for scannable hierarchy
+- Dynamic SVG `<desc>` element for screen reader curve summary (e.g. "3 curves: Ceiling Light, Sofa Lamp, LED Strip")
+- Design review TODOs (TODOS.md) with 10 tracked improvement items
+
+### Changed
+
+- Editor panel shell: wider max-width (1360px), styled control-row with gradient surface, responsive breakpoints at 900px
+- Panel DOM construction is now one-time: `shadowRoot.innerHTML` only runs on first render, preventing card-mount wipe on hass updates
+- Panel uses ES module import (`import()`) instead of script tag injection for curve card loading
+- Entity picker filters by `config_entry_id` when deep-linked via `?config_entry=...` URL param
+- Error retry buttons changed from "Tap to retry" to "Retry"
+- CSS custom properties (`--curve-graph-max-height`, `--curve-legend-max-height`, `--curve-scrubber-badges-max-height`) for component sizing in embedded mode
+
+### Fixed
+
+- Card mount cleared when no entity is selected (previously showed stale card)
+- Panel entity loading race condition with config_entry filtering
+
 ## [2.10.0] - 2026-04-12
 
 ### Added
