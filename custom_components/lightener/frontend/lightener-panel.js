@@ -92,14 +92,8 @@ class LightenerEditorPanel extends HTMLElement {
       return;
     }
     if (!this._cardScriptPromise) {
-      this._cardScriptPromise = new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = "/lightener/lightener-curve-card.js";
-        script.async = true;
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error("Could not load lightener-curve-card.js"));
-        document.head.appendChild(script);
-      });
+      const moduleUrl = "/lightener/lightener-curve-card.js";
+      this._cardScriptPromise = import(/* @vite-ignore */ moduleUrl);
     }
     await this._cardScriptPromise;
   }
@@ -143,7 +137,11 @@ class LightenerEditorPanel extends HTMLElement {
       mount.replaceChildren(this._card);
     }
 
-    this._card.setConfig({ type: "custom:lightener-curve-card", entity: this._selectedEntity });
+    this._card.setConfig({
+      type: "custom:lightener-curve-card",
+      entity: this._selectedEntity,
+      embedded: true,
+    });
     this._card.hass = this._hass;
   }
 
@@ -157,21 +155,33 @@ class LightenerEditorPanel extends HTMLElement {
         <style>
           :host {
             display: block;
-            padding: 16px;
+            padding: 18px 20px 28px;
             box-sizing: border-box;
+            --lightener-panel-surface: color-mix(
+              in srgb,
+              var(--card-background-color) 95%,
+              var(--primary-text-color) 5%
+            );
+            --lightener-panel-border: color-mix(
+              in srgb,
+              var(--divider-color) 70%,
+              transparent
+            );
           }
           .shell {
-            max-width: 1100px;
+            max-width: 1360px;
             margin: 0 auto;
           }
           h1 {
-            margin: 0 0 12px;
-            font-size: 1.35rem;
-            line-height: 1.2;
+            margin: 0 0 8px;
+            font-size: clamp(1.45rem, 2vw, 1.8rem);
+            line-height: 1.1;
+            letter-spacing: -0.02em;
           }
           p {
-            margin: 0 0 12px;
+            margin: 0 0 16px;
             color: var(--secondary-text-color);
+            max-width: 66ch;
           }
           label {
             display: block;
@@ -179,31 +189,57 @@ class LightenerEditorPanel extends HTMLElement {
             font-size: 0.9rem;
             color: var(--secondary-text-color);
           }
+          .control-row {
+            margin-bottom: 18px;
+            padding: 16px 18px 18px;
+            border-radius: 18px;
+            border: 1px solid var(--lightener-panel-border);
+            background:
+              linear-gradient(
+                180deg,
+                color-mix(in srgb, var(--lightener-panel-surface) 92%, transparent),
+                color-mix(in srgb, var(--lightener-panel-surface) 98%, transparent)
+              );
+          }
           select {
             width: 100%;
-            max-width: 720px;
-            height: 40px;
-            padding: 0 10px;
-            border-radius: 8px;
+            max-width: 640px;
+            height: 44px;
+            padding: 0 12px;
+            border-radius: 12px;
             border: 1px solid var(--divider-color);
             background: var(--card-background-color);
             color: var(--primary-text-color);
-            margin-bottom: 16px;
           }
           .hint {
             font-size: 0.9rem;
-            margin-bottom: 16px;
+            margin-top: 10px;
           }
           .error {
             color: var(--error-color);
+            margin-top: 10px;
+          }
+          #card-mount {
+            min-height: 320px;
+          }
+          @media (max-width: 900px) {
+            :host {
+              padding: 14px 14px 22px;
+            }
+            .control-row {
+              padding: 14px;
+              border-radius: 14px;
+            }
           }
         </style>
         <div class="shell">
           <h1>Lightener Curve Editor</h1>
           <p>Pick a Lightener light entity and edit its curves directly here.</p>
-          <label for="entity-select">Light entity</label>
-          <select id="entity-select"></select>
-          <div id="status-msg"></div>
+          <div class="control-row">
+            <label for="entity-select">Light entity</label>
+            <select id="entity-select"></select>
+            <div id="status-msg"></div>
+          </div>
           <div id="card-mount"></div>
         </div>
       `;

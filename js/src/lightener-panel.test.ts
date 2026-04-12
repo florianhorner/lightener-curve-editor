@@ -5,11 +5,11 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 beforeAll(async () => {
   if (!customElements.get('lightener-curve-card')) {
     class FakeCurveCard extends HTMLElement {
-      config?: { type: string; entity: string };
+      config?: { type: string; entity: string; embedded?: boolean };
 
       hass?: unknown;
 
-      setConfig(config: { type: string; entity: string }) {
+      setConfig(config: { type: string; entity: string; embedded?: boolean }) {
         this.config = config;
       }
     }
@@ -17,6 +17,7 @@ beforeAll(async () => {
     customElements.define('lightener-curve-card', FakeCurveCard);
   }
 
+  // @ts-expect-error Runtime JS asset imported directly for the custom panel test.
   await import('../../custom_components/lightener/frontend/lightener-panel.js');
 });
 
@@ -28,6 +29,9 @@ describe('lightener-editor-panel', () => {
 
   it('clears the mounted curve card when no valid entity remains', async () => {
     const Panel = customElements.get('lightener-editor-panel');
+    if (!Panel) {
+      throw new Error('lightener-editor-panel was not defined');
+    }
     const panel = new Panel() as HTMLElement & {
       hass: unknown;
       _card: HTMLElement | null;
@@ -47,6 +51,12 @@ describe('lightener-editor-panel', () => {
     const mount = panel.shadowRoot!.querySelector('#card-mount')!;
     expect(mount.children).toHaveLength(1);
     expect(panel._card).not.toBeNull();
+    expect((panel._card as HTMLElement & { config?: { embedded?: boolean } }).config).toMatchObject(
+      {
+        entity: 'light.test',
+        embedded: true,
+      }
+    );
 
     panel._lightenerEntities = [];
     panel.hass = { states: {}, callWS: async () => ({ entities: [] }) };
