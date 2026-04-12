@@ -11,12 +11,19 @@
           "name": "A room or area name works best, e.g. \"Living Room\""
         }
       },
+      "area": {
+        "title": "Filter by area (optional)",
+        "description": "Select a room or area to narrow down the lights on the next screen. With 100+ lights this saves a lot of scrolling. Leave blank to see all lights.",
+        "data": {
+          "area_id": "Room / area"
+        }
+      },
       "lights": {
         "title": "Select lights",
-        "description": "Pick a preset curve for new lights. After setup, open **Lightener Editor** in the sidebar to fine-tune each curve interactively.",
+        "description": "Pick the lights to control and choose a starting curve. You can fine-tune each curve individually in the **Lightener Editor** after setup.",
         "data": {
           "controlled_entities": "Lights to control",
-          "curve_preset": "Starting curve preset"
+          "curve_preset": "Starting curve"
         }
       },
       "light_configuration": {
