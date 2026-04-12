@@ -305,7 +305,9 @@ export class CurveScrubber extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    this._resizeObserver = new ResizeObserver(() => this._measureBadgeOverflow());
+    if (typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(() => this._measureBadgeOverflow());
+    }
   }
 
   disconnectedCallback(): void {
@@ -323,7 +325,6 @@ export class CurveScrubber extends LitElement {
 
   protected updated(): void {
     this._bindBadgeObserver();
-    this._measureBadgeOverflow();
   }
 
   private _bindBadgeObserver(): void {

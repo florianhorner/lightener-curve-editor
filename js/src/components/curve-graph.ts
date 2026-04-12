@@ -275,7 +275,9 @@ export class CurveGraph extends LitElement {
     const point = curve?.controlPoints[pointIdx];
     if (!curve || !point) return;
 
-    this._focusCurve(curve.entityId);
+    if (this.selectedCurveId !== curve.entityId) {
+      this._focusCurve(curve.entityId);
+    }
 
     const step = e.shiftKey ? 10 : 1;
     const prevX = pointIdx > 0 ? curve.controlPoints[pointIdx - 1].lightener + 1 : point.lightener;
@@ -344,6 +346,7 @@ export class CurveGraph extends LitElement {
     if (
       (e.key === ' ' || e.key === 'Delete' || e.key === 'Backspace') &&
       pointIdx > 0 &&
+      pointIdx < curve.controlPoints.length - 1 &&
       curve.controlPoints.length > 2
     ) {
       e.preventDefault();
