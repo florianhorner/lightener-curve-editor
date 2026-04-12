@@ -8,14 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Curve presets panel: click "Presets" in the card header to apply a named curve (Linear, Dim accent, Late starter, Night mode) to the selected light or all lights at once. Each preset shows a miniature SVG preview of the curve shape.
+- **Curve presets** — new "Presets" button in the card header opens a one-click picker with four named curves: Linear, Dim accent, Late starter, and Night mode. Each shows a miniature curve preview. Applies to the selected light only, or all lights if nothing is selected. Fully undoable with Ctrl+Z.
 
 ### Fixed
 
-- Presets panel now closes automatically when a point is dragged, a cancel is triggered, or the entity changes — no stale UI after switching lights
-- Applying a preset is now blocked during an in-progress save, preventing silent state divergence between the UI and the backend
-- Applying a preset to an empty curve list (load error path) now returns early instead of pushing a garbage undo entry
-- Config flow: removed unsupported `description` field from curve preset select options, fixing a `MultipleInvalid: extra keys not allowed` crash in pytest on HA 2024.11+
+- Presets panel closes automatically when you drag a point, cancel edits, or switch entities — no orphaned panel after navigating away
+- Clicking a preset while a save is already in flight is now ignored — previously the UI could fall out of sync with what was actually saved
+- Clicking a preset before curves have loaded no longer creates a phantom undo entry
+- Config flow: removed unsupported `description` field from curve preset select options, fixing a crash in pytest on HA 2024.11+
 
 ## [2.12.0] - 2026-04-12
 
