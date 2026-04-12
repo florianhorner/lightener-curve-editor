@@ -33,6 +33,12 @@ class LightenerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return await self.lightener_flow.async_step_name(user_input)
 
+    async def async_step_area(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Filter lights by area (optional step before light selection)."""
+        return await self.lightener_flow.async_step_area(user_input)
+
     async def async_step_lights(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -97,7 +103,7 @@ class LightenerFlow:
 
             self.data[CONF_FRIENDLY_NAME] = name
 
-            return await self.async_step_lights()
+            return await self.async_step_area()
 
         data_schema = {
             vol.Required("name"): str,
@@ -108,6 +114,24 @@ class LightenerFlow:
             last_step=False,
             data_schema=vol.Schema(data_schema),
             errors=errors,
+        )
+
+    async def async_step_area(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Optionally filter lights by area before the light picker."""
+        if user_input is not None:
+            self.data["_area_filter"] = user_input.get("area_id")
+            return await self.async_step_lights()
+
+        return self.flow_handler.async_show_form(
+            step_id=self.steps.get("area", "area"),
+            last_step=False,
+            data_schema=vol.Schema(
+                {
+                    vol.Optional("area_id"): selector({"area": {}}),
+                }
+            ),
         )
 
     async def async_step_lights(
@@ -158,6 +182,12 @@ class LightenerFlow:
                 self.data[CONF_ENTITIES] = entities
                 return await self.async_save_data()
 
+        # Build entity filter: filter by area if one was selected in the area step.
+        entity_filter: dict = {"domain": "light"}
+        area_id = self.data.get("_area_filter")
+        if area_id:
+            entity_filter["area"] = area_id
+
         return self.flow_handler.async_show_form(
             step_id=self.steps.get("lights", "lights"),
             last_step=True,
@@ -169,7 +199,7 @@ class LightenerFlow:
                         {
                             "entity": {
                                 "multiple": True,
-                                "filter": {"domain": "light"},
+                                "filter": entity_filter,
                                 "exclude_entities": lightener_entities,
                             }
                         }
@@ -179,15 +209,29 @@ class LightenerFlow:
                     ): selector(
                         {
                             "select": {
+                                "mode": "list",
                                 "options": [
-                                    {"value": "linear", "label": "Linear"},
-                                    {"value": "dim_accent", "label": "Dim accent"},
+                                    {
+                                        "value": "linear",
+                                        "label": "Linear",
+                                        "description": "Equal brightness — what you set is what you get.",
+                                    },
+                                    {
+                                        "value": "dim_accent",
+                                        "label": "Dim accent",
+                                        "description": "Caps at ~45% max — great for mood or accent lighting that should never get harsh.",
+                                    },
                                     {
                                         "value": "late_starter",
                                         "label": "Late starter",
+                                        "description": "Stays very dim until ~45%, then brightens quickly. Useful for lights that look ugly at low brightness.",
                                     },
-                                    {"value": "night_mode", "label": "Night mode"},
-                                ]
+                                    {
+                                        "value": "night_mode",
+                                        "label": "Night mode",
+                                        "description": "Caps at ~25% — barely bright even at full Lightener level. Good for hallways or sleep-safe areas.",
+                                    },
+                                ],
                             }
                         }
                     ),
