@@ -347,6 +347,8 @@ export class CurveGraph extends LitElement {
           composed: true,
         })
       );
+      // After re-render the new point is at a sorted position; refocus the original point
+      this.updateComplete.then(() => this._refocusHitCircle(curveIdx, pointIdx));
       return;
     }
     if (
@@ -363,6 +365,29 @@ export class CurveGraph extends LitElement {
           composed: true,
         })
       );
+      // After removal, focus the preceding point so keyboard nav can continue
+      this.updateComplete.then(() => this._refocusHitCircle(curveIdx, Math.max(1, pointIdx - 1)));
+    }
+  }
+
+  private _refocusHitCircle(curveIdx: number, pointIdx: number): void {
+    const hitCircles = this.renderRoot.querySelectorAll<SVGCircleElement>('.hit-circle');
+    // Hit circles are rendered per-curve in order; find the correct one by data position
+    const curves = this.curves;
+    let offset = 0;
+    for (let ci = 0; ci < curveIdx; ci++) {
+      const c = curves[ci];
+      if (
+        c &&
+        c.visible &&
+        (this.selectedCurveId === null || c.entityId === this.selectedCurveId)
+      ) {
+        offset += c.controlPoints.length;
+      }
+    }
+    const target = hitCircles[offset + pointIdx];
+    if (target && (target as HTMLElement).focus) {
+      (target as unknown as HTMLElement).focus();
     }
   }
 
