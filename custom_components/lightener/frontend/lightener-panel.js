@@ -33,7 +33,8 @@ class LightenerEditorPanel extends HTMLElement {
     const entities = this._getEditorEntities();
 
     if (!this._selectedEntity || !entities.some((entity) => entity.entity_id === this._selectedEntity)) {
-      const saved = window.localStorage.getItem("lightener_editor_entity");
+      let saved = null;
+      try { saved = window.localStorage.getItem("lightener_editor_entity"); } catch { /* private browsing */ }
       if (saved && entities.some((entity) => entity.entity_id === saved)) {
         this._selectedEntity = saved;
       } else {
@@ -156,10 +157,14 @@ class LightenerEditorPanel extends HTMLElement {
     this._pendingEntity = null;
     this._switchSaving = false;
     this._cardDirty = false;
-    if (entityId) {
-      window.localStorage.setItem("lightener_editor_entity", entityId);
-    } else {
-      window.localStorage.removeItem("lightener_editor_entity");
+    try {
+      if (entityId) {
+        window.localStorage.setItem("lightener_editor_entity", entityId);
+      } else {
+        window.localStorage.removeItem("lightener_editor_entity");
+      }
+    } catch {
+      // Silently ignore — private browsing or quota-exceeded; entity selection just won't persist
     }
     this._render();
     this._syncCard();
