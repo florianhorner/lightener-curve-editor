@@ -1,4 +1,4 @@
-# Lightener Curve Editor
+# Lightener Curve Editor (DevFork)
 
 [![GitHub Release][releases-shield]][releases]
 [![hacs][hacsbadge]][hacs]
