@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+# This script assumes a Debian/Ubuntu environment (apt-get, dpkg).
+if ! command -v apt-get >/dev/null 2>&1; then
+  echo "[conductor-setup] ERROR: requires Debian/Ubuntu (apt-get not found)"
+  echo "  On macOS, install tools manually: node, gh, jq, then run: scripts/setup"
+  exit 1
+fi
+
 # apt-get, keyring writes, and package installs require root.
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   echo "[conductor-setup] ERROR: must run as root (e.g. sudo scripts/conductor-setup)"
@@ -35,10 +42,16 @@ echo "[conductor-setup] Installing JS frontend deps (js/)..."
 cd "$REPO_ROOT/js"
 # Use npm ci (respects lockfile). Fall back to npm install only if lockfile
 # is absent; never suppress stderr — errors here indicate real problems.
+# --ignore-scripts prevents npm lifecycle scripts (postinstall etc.) from
+# running as root, mitigating supply-chain attacks via malicious packages.
 if [ -f package-lock.json ]; then
-  npm ci --prefer-offline
+  npm ci --prefer-offline --ignore-scripts
 else
-  npm install
+  npm install --ignore-scripts
+fi
+# Fix ownership if running via sudo (SUDO_UID/SUDO_GID set by sudo).
+if [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ]; then
+  chown -R "$SUDO_UID:$SUDO_GID" node_modules/ 2>/dev/null || true
 fi
 cd "$REPO_ROOT"
 
@@ -75,21 +88,23 @@ export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${PWD}/custom_components"
 echo "Lightener dev env active — HA at: scripts/develop"
 EOF
 
+_PY_VER="$(.venv/bin/python --version 2>&1 || echo 'unknown')"
+_NODE_VER="$(node --version)"
+_GH_VER="$(gh --version 2>/dev/null | awk '{print $3}' | head -1)"
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  Conductor workspace ready                               ║"
-echo "║                                                          ║"
-echo "║  Python:  .venv/bin/python (HA 3.13.2)                  ║"
-echo "║  Node:    $(node --version)"
-echo "║  gh CLI:  $(gh --version 2>/dev/null | awk '{print $3}' | head -1)"
-echo "║                                                          ║"
-echo "║  Run HA locally:  scripts/develop                        ║"
-echo "║  Build JS card:   cd js && npm run build                 ║"
-echo "║  Lint:            scripts/lint  (Python)                 ║"
-echo "║                   cd js && npm run lint  (TS)            ║"
-echo "║  Tests:           pytest  (Python)                       ║"
-echo "║                   cd js && npm test  (TS/vitest)         ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo "  Conductor workspace ready"
+echo "  ========================"
+echo ""
+echo "  Python:  .venv/bin/python (${_PY_VER})"
+echo "  Node:    ${_NODE_VER}"
+echo "  gh CLI:  ${_GH_VER}"
+echo ""
+echo "  Run HA locally:  scripts/develop"
+echo "  Build JS card:   cd js && npm run build"
+echo "  Lint:            scripts/lint  (Python)"
+echo "                   cd js && npm run lint  (TS)"
+echo "  Tests:           pytest  (Python)"
+echo "                   cd js && npm test  (TS/vitest)"
 echo ""
 
 # ── WISHLIST (not yet automated — requires auth or external install) ──────────
