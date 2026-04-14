@@ -405,20 +405,23 @@ export class CurveGraph extends LitElement {
     this._longPressFired = false;
 
     // Start long-press timer for touch removal (500ms)
+    // Origin point (index 0) cannot be removed — skip long-press removal
     this._clearLongPress();
-    this._longPressTimer = setTimeout(() => {
-      this._longPressFired = true;
-      // Cancel any drag in progress
-      this._dragCurveIdx = -1;
-      this._dragPointIdx = -1;
-      this.dispatchEvent(
-        new CustomEvent('point-remove', {
-          detail: { curveIndex: curveIdx, pointIndex: pointIdx },
-          bubbles: true,
-          composed: true,
-        })
-      );
-    }, 500);
+    if (pointIdx > 0) {
+      this._longPressTimer = setTimeout(() => {
+        this._longPressFired = true;
+        // Cancel any drag in progress
+        this._dragCurveIdx = -1;
+        this._dragPointIdx = -1;
+        this.dispatchEvent(
+          new CustomEvent('point-remove', {
+            detail: { curveIndex: curveIdx, pointIndex: pointIdx },
+            bubbles: true,
+            composed: true,
+          })
+        );
+      }, 500);
+    }
 
     // Capture on the SVG so move/up events fire on the SVG, not the circle
     this._svgRef?.setPointerCapture(e.pointerId);
