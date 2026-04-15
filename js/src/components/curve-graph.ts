@@ -102,9 +102,9 @@ export class CurveGraph extends LitElement {
       r: 8;
       filter: drop-shadow(0 0 8px var(--glow-color, #42a5f5));
     }
-    .control-point.fixed {
-      cursor: default;
-      opacity: 0.5;
+    .control-point.origin {
+      cursor: ns-resize;
+      stroke-dasharray: 2 2;
     }
     .hit-circle:focus-visible {
       outline: none;
@@ -737,7 +737,7 @@ export class CurveGraph extends LitElement {
       ${
         showPoints
           ? curve.controlPoints.map((cp, pi) => {
-              const isFixed = false;
+              const isOrigin = pi === 0;
               const isActive = isDraggingThisCurve && this._dragPointIdx === pi;
               const isHovered =
                 this._hoveredPoint?.curve === curveIdx && this._hoveredPoint?.point === pi;
@@ -749,8 +749,8 @@ export class CurveGraph extends LitElement {
                 r="${this._isMobile ? 28 : 22}"
                 fill="transparent"
                 pointer-events="all"
-                tabindex="${isFixed ? -1 : 0}"
-                role="${isFixed ? 'presentation' : 'button'}"
+                tabindex="0"
+                role="button"
                 aria-label="${curve.friendlyName} point ${cp.lightener}% group brightness to ${cp.target}% light brightness. ${pi === 0 ? 'Arrow Up/Down to adjust starting brightness. Cannot be moved horizontally.' : 'Arrow keys move, Enter adds a nearby point, Space removes.'}"
                 style="touch-action: none; -webkit-touch-callout: none"
                 @pointerdown=${(e: PointerEvent) => this._onPointerDown(e, curveIdx, pi)}
@@ -762,7 +762,7 @@ export class CurveGraph extends LitElement {
                 @keydown=${(e: KeyboardEvent) => this._onPointKeyDown(e, curveIdx, pi)}
               />
               <circle
-                class="control-point ${isFixed ? 'fixed' : ''} ${
+                class="control-point ${isOrigin ? 'origin' : ''} ${
                   isActive ? 'dragging' : ''
                 } ${isHovered ? 'hovered' : ''} ${
                   this._focusedPoint?.curve === curveIdx && this._focusedPoint?.point === pi
