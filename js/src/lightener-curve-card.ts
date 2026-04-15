@@ -1398,7 +1398,7 @@ export class LightenerCurveCard extends LitElement {
         <div class="status-stack">
           ${this._previewActive
             ? html`<div class="preview-notice" role="status" aria-live="polite">
-                Previewing live — release to restore original brightness
+                Previewing live — click Restore to return to original brightness
               </div>`
             : nothing}
           ${this._saveSuccess

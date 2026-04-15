@@ -93,7 +93,7 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
         style="opacity: ${h}"
         pointer-events="none"
       />
-      ${r?t.controlPoints.map((i,r)=>{const s=d&&this._dragPointIdx===r,o=this._hoveredPoint?.curve===e&&this._hoveredPoint?.point===r;return q`
+      ${r?t.controlPoints.map((i,r)=>{const s=0===r,o=d&&this._dragPointIdx===r,n=this._hoveredPoint?.curve===e&&this._hoveredPoint?.point===r;return q`
               <circle
                 class="hit-circle"
                 cx="${wt(i.lightener)}"
@@ -101,8 +101,8 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
                 r="${this._isMobile?28:22}"
                 fill="transparent"
                 pointer-events="all"
-                tabindex="${0}"
-                role="${"button"}"
+                tabindex="0"
+                role="button"
                 aria-label="${t.friendlyName} point ${i.lightener}% group brightness to ${i.target}% light brightness. ${0===r?"Arrow Up/Down to adjust starting brightness. Cannot be moved horizontally.":"Arrow keys move, Enter adds a nearby point, Space removes."}"
                 style="touch-action: none; -webkit-touch-callout: none"
                 @pointerdown=${t=>this._onPointerDown(t,e,r)}
@@ -114,7 +114,7 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
                 @keydown=${t=>this._onPointKeyDown(t,e,r)}
               />
               <circle
-                class="control-point ${""} ${s?"dragging":""} ${o?"hovered":""} ${this._focusedPoint?.curve===e&&this._focusedPoint?.point===r?"focused":""}"
+                class="control-point ${s?"origin":""} ${o?"dragging":""} ${n?"hovered":""} ${this._focusedPoint?.curve===e&&this._focusedPoint?.point===r?"focused":""}"
                 cx="${wt(i.lightener)}"
                 cy="${kt(i.target)}"
                 r="6"
@@ -238,9 +238,9 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
       r: 8;
       filter: drop-shadow(0 0 8px var(--glow-color, #42a5f5));
     }
-    .control-point.fixed {
-      cursor: default;
-      opacity: 0.5;
+    .control-point.origin {
+      cursor: ns-resize;
+      stroke-dasharray: 2 2;
     }
     .hit-circle:focus-visible {
       outline: none;
@@ -312,7 +312,7 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
       font-size: 9.5px;
       font-family: inherit;
     }
-  `,t([gt({type:Array})],St.prototype,"curves",void 0),t([gt({type:String})],St.prototype,"selectedCurveId",void 0),t([gt({type:Boolean})],St.prototype,"readOnly",void 0),t([gt({type:Number})],St.prototype,"scrubberPosition",void 0),t([vt()],St.prototype,"_dragCurveIdx",void 0),t([vt()],St.prototype,"_dragPointIdx",void 0),t([vt()],St.prototype,"_hoveredPoint",void 0),t([vt()],St.prototype,"_focusedPoint",void 0),t([vt()],St.prototype,"_isMobile",void 0),t([_t("svg")],St.prototype,"_svgRef",void 0),St=t([ht("curve-graph")],St);let Mt=class extends dt{constructor(){super(...arguments),this.curves=[],this.readOnly=!1,this._position=50,this._overflowCount=0,this._expanded=!1,this._dragging=!1,this._trackRef=null,this._resizeObserver=null,this._observedBadgesRef=null}_badgeTextColor(t){const e=t.toLowerCase();return"#ffca28"===e?"#9e7c00":"#ffa726"===e?"#b36b00":t}_getInterpolatedValues(){const t=Math.round(this._position);return this.curves.filter(t=>t.visible).map(e=>({entityId:e.entityId,name:e.friendlyName,color:e.color,value:Math.round(At(e.controlPoints,t))}))}_onPointerDown(t){this.readOnly||(t.preventDefault(),this._dragging=!0,t.target.setPointerCapture(t.pointerId),this._updatePositionFromClient(t.clientX),this.dispatchEvent(new CustomEvent("scrubber-start",{bubbles:!0,composed:!0})))}_onPointerMove(t){this._dragging&&(t.preventDefault(),this._updatePositionFromClient(t.clientX))}_onPointerUp(){this._dragging&&(this._dragging=!1,this.dispatchEvent(new CustomEvent("scrubber-end",{bubbles:!0,composed:!0})))}_onTrackClick(t){this.readOnly||this._updatePositionFromClient(t.clientX)}_onKeyDown(t){if(this.readOnly)return;const e=t.shiftKey?10:1;if("ArrowRight"===t.key||"ArrowUp"===t.key)t.preventDefault(),this._position=Math.min(100,this._position+e);else if("ArrowLeft"===t.key||"ArrowDown"===t.key)t.preventDefault(),this._position=Math.max(0,this._position-e);else if("Home"===t.key)t.preventDefault(),this._position=0;else{if("End"!==t.key)return;t.preventDefault(),this._position=100}this._emitPosition()}_updatePositionFromClient(t){const e=this._trackRef;if(!e)return;const i=e.getBoundingClientRect(),r=(t-i.left)/i.width*100;this._position=Math.max(0,Math.min(100,r)),this._emitPosition()}_emitPosition(){this.dispatchEvent(new CustomEvent("scrubber-move",{detail:{position:this._position},bubbles:!0,composed:!0}))}connectedCallback(){super.connectedCallback(),"undefined"!=typeof ResizeObserver&&(this._resizeObserver=new ResizeObserver(()=>this._measureBadgeOverflow()))}disconnectedCallback(){super.disconnectedCallback(),this._resizeObserver?.disconnect(),this._resizeObserver=null,this._observedBadgesRef=null}firstUpdated(){this._trackRef=this.renderRoot.querySelector(".track-area"),this._bindBadgeObserver(),this._measureBadgeOverflow()}updated(){this._bindBadgeObserver()}_bindBadgeObserver(){this._resizeObserver&&this._badgesRef&&this._observedBadgesRef!==this._badgesRef&&(this._resizeObserver.disconnect(),this._resizeObserver.observe(this._badgesRef),this._observedBadgesRef=this._badgesRef)}_measureBadgeOverflow(){const t=this._badgesRef;if(!t)return;const e=t.clientHeight+1,i=[...t.querySelectorAll('.badge[data-value-badge="true"]')].filter(t=>t.offsetTop+t.offsetHeight>e).length;i!==this._overflowCount&&(this._overflowCount=i),0===i&&(this._expanded=!1)}render(){const t=this._getInterpolatedValues(),e=Math.round(this._position);return K`
+  `,t([gt({type:Array})],St.prototype,"curves",void 0),t([gt({type:String})],St.prototype,"selectedCurveId",void 0),t([gt({type:Boolean})],St.prototype,"readOnly",void 0),t([gt({type:Number})],St.prototype,"scrubberPosition",void 0),t([vt()],St.prototype,"_dragCurveIdx",void 0),t([vt()],St.prototype,"_dragPointIdx",void 0),t([vt()],St.prototype,"_hoveredPoint",void 0),t([vt()],St.prototype,"_focusedPoint",void 0),t([vt()],St.prototype,"_isMobile",void 0),t([_t("svg")],St.prototype,"_svgRef",void 0),St=t([ht("curve-graph")],St);let Mt=class extends dt{constructor(){super(...arguments),this.curves=[],this.readOnly=!1,this._position=50,this._overflowCount=0,this._expanded=!1,this._dragging=!1,this._trackRef=null,this._resizeObserver=null,this._observedBadgesRef=null}_badgeTextColor(t){const e=t.toLowerCase();return"#ffca28"===e?"#9e7c00":"#ffa726"===e?"#b36b00":t}_getInterpolatedValues(){const t=Math.round(this._position);return this.curves.filter(t=>t.visible).map(e=>({entityId:e.entityId,name:e.friendlyName,color:e.color,value:Math.round(At(e.controlPoints,t))}))}_onPointerDown(t){this.readOnly||(t.preventDefault(),this._dragging=!0,t.target.setPointerCapture(t.pointerId),this._updatePositionFromClient(t.clientX),this.dispatchEvent(new CustomEvent("scrubber-start",{bubbles:!0,composed:!0})))}_onPointerMove(t){this._dragging&&(t.preventDefault(),this._updatePositionFromClient(t.clientX))}_onPointerUp(){this._dragging&&(this._dragging=!1,this.dispatchEvent(new CustomEvent("scrubber-end",{bubbles:!0,composed:!0})))}_onTrackClick(t){this.readOnly||this._updatePositionFromClient(t.clientX)}_onKeyDown(t){if(this.readOnly)return;const e=t.shiftKey?10:1;if("ArrowRight"===t.key||"ArrowUp"===t.key)t.preventDefault(),this._position=Math.min(100,this._position+e);else if("ArrowLeft"===t.key||"ArrowDown"===t.key)t.preventDefault(),this._position=Math.max(0,this._position-e);else if("Home"===t.key)t.preventDefault(),this._position=0;else{if("End"!==t.key)return;t.preventDefault(),this._position=100}this._emitPosition()}_updatePositionFromClient(t){const e=this._trackRef;if(!e)return;const i=e.getBoundingClientRect(),r=(t-i.left)/i.width*100;this._position=Math.max(0,Math.min(100,r)),this._emitPosition()}_emitPosition(){this.dispatchEvent(new CustomEvent("scrubber-move",{detail:{position:this._position},bubbles:!0,composed:!0}))}connectedCallback(){super.connectedCallback(),"undefined"!=typeof ResizeObserver&&(this._resizeObserver=new ResizeObserver(()=>this._measureBadgeOverflow()))}disconnectedCallback(){super.disconnectedCallback(),this._resizeObserver?.disconnect(),this._resizeObserver=null,this._observedBadgesRef=null}firstUpdated(){this._trackRef=this.renderRoot.querySelector(".track-area"),this._bindBadgeObserver(),this._measureBadgeOverflow()}updated(){this._bindBadgeObserver()}_bindBadgeObserver(){this._resizeObserver&&this._badgesRef&&this._observedBadgesRef!==this._badgesRef&&(this._resizeObserver.disconnect(),this._resizeObserver.observe(this._badgesRef),this._observedBadgesRef=this._badgesRef)}_measureBadgeOverflow(){const t=this._badgesRef;if(!t)return;if(this._expanded)return;const e=t.clientHeight+1,i=[...t.querySelectorAll('.badge[data-value-badge="true"]')].filter(t=>t.offsetTop+t.offsetHeight>e).length;i!==this._overflowCount&&(this._overflowCount=i)}render(){const t=this._getInterpolatedValues(),e=Math.round(this._position);return K`
       <div class="scrubber-panel">
         <div class="scrubber-label">Preview at brightness</div>
         <div
@@ -1059,7 +1059,7 @@ function t(t,e,i,r){var s,o=arguments.length,n=o<3?e:null===r?r=Object.getOwnPro
 
         <div class="status-stack">
           ${this._previewActive?K`<div class="preview-notice" role="status" aria-live="polite">
-                Previewing live — release to restore original brightness
+                Previewing live — click Restore to return to original brightness
               </div>`:W}
           ${this._saveSuccess?K`<div class="success" role="status" aria-live="polite">
                 <svg
