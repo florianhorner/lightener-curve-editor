@@ -103,8 +103,10 @@ export class CurveGraph extends LitElement {
       filter: drop-shadow(0 0 8px var(--glow-color, #42a5f5));
     }
     .control-point.origin {
-      cursor: ns-resize;
       stroke-dasharray: 2 2;
+    }
+    .hit-circle.origin-hit {
+      cursor: ns-resize;
     }
     .hit-circle:focus-visible {
       outline: none;
@@ -733,7 +735,7 @@ export class CurveGraph extends LitElement {
                 this._hoveredPoint?.curve === curveIdx && this._hoveredPoint?.point === pi;
               return svg`
               <circle
-                class="hit-circle"
+                class="hit-circle ${isOrigin ? 'origin-hit' : ''}"
                 data-curve="${curveIdx}"
                 data-point="${pi}"
                 cx="${toSvgX(cp.lightener)}"

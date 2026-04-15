@@ -400,6 +400,10 @@ export class CurveScrubber extends LitElement {
           ${this._overflowCount > 0 || this._expanded
             ? html`<button
                 class="overflow-indicator"
+                aria-expanded=${this._expanded}
+                aria-label="${this._expanded
+                  ? 'Show fewer light badges'
+                  : `Show ${this._overflowCount} more light badges`}"
                 @click=${() => {
                   this._expanded = !this._expanded;
                 }}

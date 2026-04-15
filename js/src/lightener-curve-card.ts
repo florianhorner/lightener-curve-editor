@@ -592,6 +592,10 @@ export class LightenerCurveCard extends LitElement {
       color: #2563eb;
       background: rgba(37, 99, 235, 0.04);
     }
+    .presets-btn:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
     .presets-btn.active {
       border-color: #2563eb;
       color: #2563eb;
@@ -628,6 +632,10 @@ export class LightenerCurveCard extends LitElement {
     .preset-option:hover {
       border-color: #2563eb;
       background: rgba(37, 99, 235, 0.04);
+    }
+    .preset-option:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
     }
     .preset-name {
       font-size: 12px;
@@ -672,6 +680,10 @@ export class LightenerCurveCard extends LitElement {
       color: #2563eb;
       background: rgba(37, 99, 235, 0.04);
     }
+    .preview-toggle-btn:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
     .preview-toggle-btn.active {
       border-color: #2563eb;
       color: #2563eb;
@@ -715,6 +727,7 @@ export class LightenerCurveCard extends LitElement {
     const entityChanged = config.entity !== this._config.entity;
     this._config = config;
     if (entityChanged) {
+      if (this._previewActive) this._stopPreview();
       this._loaded = false;
       this._loadedEntityId = undefined;
       this._loadErrorEntityId = undefined;
@@ -1004,6 +1017,7 @@ export class LightenerCurveCard extends LitElement {
   private _stopPreview = (): void => {
     if (!this._previewActive || !this._hass) return;
     this._previewActive = false;
+    this._previewRafPending = false;
     if (this._previewTrailingTimer) {
       clearTimeout(this._previewTrailingTimer);
       this._previewTrailingTimer = null;
@@ -1029,16 +1043,22 @@ export class LightenerCurveCard extends LitElement {
    */
   private readonly _PREVIEW_INTERVAL_MS = 300;
 
+  private _pendingPreviewPosition: number | null = null;
+
   private _previewLights(position: number): void {
     if (!this._previewActive || !this._hass) return;
+    this._pendingPreviewPosition = position;
     const now = Date.now();
     const elapsed = now - this._lastPreviewTime;
     if (elapsed < this._PREVIEW_INTERVAL_MS) {
-      // Schedule a trailing-edge call so the final position is never dropped
+      // Schedule a trailing-edge call so the final position is never dropped.
+      // Read from _pendingPreviewPosition at fire time so rapid moves don't get stale.
       if (!this._previewTrailingTimer) {
         this._previewTrailingTimer = setTimeout(() => {
           this._previewTrailingTimer = null;
-          this._previewLights(position);
+          if (this._pendingPreviewPosition !== null) {
+            this._previewLights(this._pendingPreviewPosition);
+          }
         }, this._PREVIEW_INTERVAL_MS - elapsed);
       }
       return;
@@ -1274,6 +1294,7 @@ export class LightenerCurveCard extends LitElement {
       // If user switched entity while save was in flight, don't corrupt the new entity's state.
       // Clear undo stack so stale history for the old entity can't be replayed after a switch-back.
       if (this._entityId !== savedEntityId) {
+        if (this._previewActive) this._stopPreview();
         this._undoStack = [];
         return false;
       }
