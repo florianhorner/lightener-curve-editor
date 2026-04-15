@@ -268,6 +268,7 @@ export class LightenerCurveCard extends LitElement {
   private _dragUndoPushed = false;
   private _loaded = false;
   private _loadedEntityId: string | undefined = undefined;
+  private _loadErrorEntityId: string | undefined = undefined;
   private _boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _boundBeforeUnload: ((e: BeforeUnloadEvent) => void) | null = null;
   private _saveSuccessTimer: ReturnType<typeof setTimeout> | null = null;
@@ -275,6 +276,7 @@ export class LightenerCurveCard extends LitElement {
   @state() private _previewActive = false;
   @state() private _showPresets = false;
   private _previewRafPending = false;
+  private _previewTrailingTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastPreviewTime = 0;
   private _previewRestoreBrightness: Map<string, number | null> = new Map();
   private _lastEmittedDirtyState = false;
@@ -297,7 +299,10 @@ export class LightenerCurveCard extends LitElement {
       --text-lg: 14px;
 
       display: block;
-      font-family: var(--paper-font-body1_-_font-family, 'Roboto', sans-serif);
+      font-family: var(
+        --mdc-typography-body1-font-family,
+        var(--paper-font-body1_-_font-family, 'Roboto', sans-serif)
+      );
       height: fit-content;
     }
     .card {
@@ -341,7 +346,7 @@ export class LightenerCurveCard extends LitElement {
     }
     .workspace {
       display: grid;
-      gap: 14px;
+      gap: 12px;
     }
     .main-stack,
     .side-rail,
@@ -349,7 +354,7 @@ export class LightenerCurveCard extends LitElement {
     .status-stack {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
       min-width: 0;
     }
     .graph-panel {
@@ -587,6 +592,10 @@ export class LightenerCurveCard extends LitElement {
       color: #2563eb;
       background: rgba(37, 99, 235, 0.04);
     }
+    .presets-btn:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
     .presets-btn.active {
       border-color: #2563eb;
       color: #2563eb;
@@ -624,6 +633,10 @@ export class LightenerCurveCard extends LitElement {
       border-color: #2563eb;
       background: rgba(37, 99, 235, 0.04);
     }
+    .preset-option:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
     .preset-name {
       font-size: 12px;
       font-weight: 600;
@@ -639,6 +652,64 @@ export class LightenerCurveCard extends LitElement {
       display: block;
       opacity: 0.65;
       margin-bottom: 2px;
+    }
+    .preview-toggle-row {
+      display: flex;
+      align-items: center;
+    }
+    .preview-toggle-btn {
+      border: 1px solid var(--divider);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      background: transparent;
+      color: var(--secondary-text);
+      cursor: pointer;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition:
+        border-color 0.15s,
+        color 0.15s,
+        background 0.15s;
+    }
+    .preview-toggle-btn:hover {
+      border-color: #2563eb;
+      color: #2563eb;
+      background: rgba(37, 99, 235, 0.04);
+    }
+    .preview-toggle-btn:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
+    .preview-toggle-btn.active {
+      border-color: #2563eb;
+      color: #2563eb;
+      background: rgba(37, 99, 235, 0.06);
+    }
+    .preview-live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #2563eb;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    .preview-restore-text {
+      opacity: 0.7;
+    }
+    @keyframes pulse-dot {
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.5;
+        transform: scale(0.8);
+      }
     }
   `;
 
@@ -656,8 +727,10 @@ export class LightenerCurveCard extends LitElement {
     const entityChanged = config.entity !== this._config.entity;
     this._config = config;
     if (entityChanged) {
+      if (this._previewActive) this._stopPreview();
       this._loaded = false;
       this._loadedEntityId = undefined;
+      this._loadErrorEntityId = undefined;
       this._showPresets = false;
       this._tryLoadCurves();
     }
@@ -696,9 +769,14 @@ export class LightenerCurveCard extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    // Reset load state on re-mount so data is refreshed
-    this._loaded = false;
-    this._loadedEntityId = undefined;
+    // Reset load state on re-mount so data is refreshed.
+    // Skip the reset if we already have a load error for the same entity — avoids
+    // re-spamming the backend (and the HA log) every time the card re-mounts on a
+    // misconfigured entity ID.
+    if (this._loadErrorEntityId !== this._entityId) {
+      this._loaded = false;
+      this._loadedEntityId = undefined;
+    }
     this._tryLoadCurves();
 
     this._boundKeyHandler = this._onKeyDown.bind(this);
@@ -709,6 +787,7 @@ export class LightenerCurveCard extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    if (this._previewActive) this._stopPreview();
     if (this._boundKeyHandler) {
       window.removeEventListener('keydown', this._boundKeyHandler);
     }
@@ -878,12 +957,16 @@ export class LightenerCurveCard extends LitElement {
       this._originalCurves = cloneCurves(curves);
       this._loaded = true;
       this._loadedEntityId = requestedEntity;
+      this._loadErrorEntityId = undefined;
     } catch (err) {
       if (this._entityId !== requestedEntity) return;
       console.error('[Lightener] Failed to load curves:', err);
       this._loadError = String(err);
       this._loaded = true;
       this._loadedEntityId = requestedEntity;
+      // Remember which entity caused the error so re-mounts don't re-request
+      // and re-spam the HA log for a permanently misconfigured entity.
+      this._loadErrorEntityId = requestedEntity;
     } finally {
       this._loading = false;
       // If entity changed during flight, trigger reload for the new entity
@@ -897,13 +980,27 @@ export class LightenerCurveCard extends LitElement {
 
   private _onScrubberMove(e: CustomEvent): void {
     this._scrubberPosition = e.detail.position;
-    this._previewLights(e.detail.position);
+    if (this._previewActive) {
+      this._previewLights(e.detail.position);
+    }
   }
 
   private _onScrubberStart(): void {
+    // No-op: preview is now controlled by the explicit preview toggle button
+  }
+
+  private _onScrubberEnd(): void {
+    // No-op: preview is now controlled by the explicit preview toggle button
+  }
+
+  private _startPreview = (): void => {
     if (!this._hass || this._previewActive) return;
     this._previewActive = true;
-    // Snapshot current brightness for each controlled light so we can restore on release
+    // Ensure the graph shows a scrubber indicator even if the user never touched the slider
+    if (this._scrubberPosition === null) {
+      this._scrubberPosition = 50;
+    }
+    // Snapshot current brightness for each controlled light so we can restore later
     this._previewRestoreBrightness.clear();
     for (const curve of this._curves) {
       const state = this._hass.states[curve.entityId];
@@ -914,11 +1011,17 @@ export class LightenerCurveCard extends LitElement {
         );
       }
     }
-  }
+    this._previewLights(this._scrubberPosition);
+  };
 
-  private _onScrubberEnd(): void {
+  private _stopPreview = (): void => {
     if (!this._previewActive || !this._hass) return;
     this._previewActive = false;
+    this._previewRafPending = false;
+    if (this._previewTrailingTimer) {
+      clearTimeout(this._previewTrailingTimer);
+      this._previewTrailingTimer = null;
+    }
     // Restore original brightness for each light
     for (const [entityId, brightness] of this._previewRestoreBrightness) {
       if (brightness === null) {
@@ -930,7 +1033,7 @@ export class LightenerCurveCard extends LitElement {
       }
     }
     this._previewRestoreBrightness.clear();
-  }
+  };
 
   /**
    * Push interpolated brightness to physical lights.
@@ -940,11 +1043,32 @@ export class LightenerCurveCard extends LitElement {
    */
   private readonly _PREVIEW_INTERVAL_MS = 300;
 
+  private _pendingPreviewPosition: number | null = null;
+
   private _previewLights(position: number): void {
     if (!this._previewActive || !this._hass) return;
+    this._pendingPreviewPosition = position;
     const now = Date.now();
-    if (now - this._lastPreviewTime < this._PREVIEW_INTERVAL_MS) return;
+    const elapsed = now - this._lastPreviewTime;
+    if (elapsed < this._PREVIEW_INTERVAL_MS) {
+      // Schedule a trailing-edge call so the final position is never dropped.
+      // Read from _pendingPreviewPosition at fire time so rapid moves don't get stale.
+      if (!this._previewTrailingTimer) {
+        this._previewTrailingTimer = setTimeout(() => {
+          this._previewTrailingTimer = null;
+          if (this._pendingPreviewPosition !== null) {
+            this._previewLights(this._pendingPreviewPosition);
+          }
+        }, this._PREVIEW_INTERVAL_MS - elapsed);
+      }
+      return;
+    }
     if (this._previewRafPending) return;
+    // Cancel any trailing timer since we're about to send
+    if (this._previewTrailingTimer) {
+      clearTimeout(this._previewTrailingTimer);
+      this._previewTrailingTimer = null;
+    }
     this._previewRafPending = true;
 
     requestAnimationFrame(() => {
@@ -1121,6 +1245,8 @@ export class LightenerCurveCard extends LitElement {
     const curve = this._curves[curveIndex];
     if (!curve) return;
     if (curve.controlPoints.length <= 2) return;
+    // Defense-in-depth: never remove origin or endpoint
+    if (pointIndex === 0 || pointIndex >= curve.controlPoints.length - 1) return;
 
     this._pushUndo();
     const curves = [...this._curves];
@@ -1153,6 +1279,8 @@ export class LightenerCurveCard extends LitElement {
   private async _onSave(): Promise<boolean> {
     if (!this._hass || !this._entityId || this._saving || this._cancelAnimating) return false;
 
+    if (this._previewActive) this._stopPreview();
+
     const savedEntityId = this._entityId;
     this._saving = true;
     this._saveError = null;
@@ -1166,6 +1294,7 @@ export class LightenerCurveCard extends LitElement {
       // If user switched entity while save was in flight, don't corrupt the new entity's state.
       // Clear undo stack so stale history for the old entity can't be replayed after a switch-back.
       if (this._entityId !== savedEntityId) {
+        if (this._previewActive) this._stopPreview();
         this._undoStack = [];
         return false;
       }
@@ -1192,11 +1321,13 @@ export class LightenerCurveCard extends LitElement {
   private _retryLoad(): void {
     this._loaded = false;
     this._loadError = null;
+    this._loadErrorEntityId = undefined;
     this._tryLoadCurves();
   }
 
   private _onCancel(): void {
     if (this._cancelAnimating) return;
+    if (this._previewActive) this._stopPreview();
     this._showPresets = false;
     this._undoStack = [];
     this._animateCurvesTo(cloneCurves(this._originalCurves), () => {
@@ -1271,6 +1402,22 @@ export class LightenerCurveCard extends LitElement {
               @scrubber-start=${this._onScrubberStart}
               @scrubber-end=${this._onScrubberEnd}
             ></curve-scrubber>
+
+            ${this._isAdmin && !this._cancelAnimating
+              ? html`
+                  <div class="preview-toggle-row">
+                    ${this._previewActive
+                      ? html`<button class="preview-toggle-btn active" @click=${this._stopPreview}>
+                          <span class="preview-live-dot"></span>
+                          Previewing on lights &nbsp;·&nbsp;
+                          <span class="preview-restore-text">Restore</span>
+                        </button>`
+                      : html`<button class="preview-toggle-btn" @click=${this._startPreview}>
+                          Preview on lights
+                        </button>`}
+                  </div>
+                `
+              : nothing}
           </div>
 
           <div class="side-rail">
@@ -1298,7 +1445,7 @@ export class LightenerCurveCard extends LitElement {
         <div class="status-stack">
           ${this._previewActive
             ? html`<div class="preview-notice" role="status" aria-live="polite">
-                Previewing live — release to restore original brightness
+                Previewing live — click Restore to return to original brightness
               </div>`
             : nothing}
           ${this._saveSuccess
