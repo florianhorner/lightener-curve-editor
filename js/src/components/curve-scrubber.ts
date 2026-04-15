@@ -337,6 +337,11 @@ export class CurveScrubber extends LitElement {
     const container = this._badgesRef;
     if (!container) return;
 
+    // Skip measurement while expanded — the inline max-height:none makes all
+    // badges visible, so hiddenCount would always be 0 and immediately collapse
+    // the panel, causing an expand/collapse flicker loop.
+    if (this._expanded) return;
+
     const maxVisibleBottom = container.clientHeight + 1;
     const badges = [...container.querySelectorAll<HTMLElement>('.badge[data-value-badge="true"]')];
     const hiddenCount = badges.filter(
@@ -345,9 +350,6 @@ export class CurveScrubber extends LitElement {
 
     if (hiddenCount !== this._overflowCount) {
       this._overflowCount = hiddenCount;
-    }
-    if (hiddenCount === 0) {
-      this._expanded = false;
     }
   }
 
