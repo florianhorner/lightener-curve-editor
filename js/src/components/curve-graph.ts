@@ -376,21 +376,11 @@ export class CurveGraph extends LitElement {
   }
 
   private _refocusHitCircle(curveIdx: number, pointIdx: number): void {
-    const hitCircles = this.renderRoot.querySelectorAll<SVGCircleElement>('.hit-circle');
-    // Hit circles are rendered per-curve in order; find the correct one by data position
-    const curves = this.curves;
-    let offset = 0;
-    for (let ci = 0; ci < curveIdx; ci++) {
-      const c = curves[ci];
-      if (
-        c &&
-        c.visible &&
-        (this.selectedCurveId === null || c.entityId === this.selectedCurveId)
-      ) {
-        offset += c.controlPoints.length;
-      }
-    }
-    const target = hitCircles[offset + pointIdx];
+    // Use data attributes to find the exact circle — render order may differ
+    // from array order because the selected curve renders last.
+    const target = this.renderRoot.querySelector<SVGCircleElement>(
+      `.hit-circle[data-curve="${curveIdx}"][data-point="${pointIdx}"]`
+    );
     if (target) {
       target.focus();
     }
@@ -744,6 +734,8 @@ export class CurveGraph extends LitElement {
               return svg`
               <circle
                 class="hit-circle"
+                data-curve="${curveIdx}"
+                data-point="${pi}"
                 cx="${toSvgX(cp.lightener)}"
                 cy="${toSvgY(cp.target)}"
                 r="${this._isMobile ? 28 : 22}"

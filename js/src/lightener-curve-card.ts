@@ -276,6 +276,7 @@ export class LightenerCurveCard extends LitElement {
   @state() private _previewActive = false;
   @state() private _showPresets = false;
   private _previewRafPending = false;
+  private _previewTrailingTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastPreviewTime = 0;
   private _previewRestoreBrightness: Map<string, number | null> = new Map();
   private _lastEmittedDirtyState = false;
@@ -1003,6 +1004,10 @@ export class LightenerCurveCard extends LitElement {
   private _stopPreview = (): void => {
     if (!this._previewActive || !this._hass) return;
     this._previewActive = false;
+    if (this._previewTrailingTimer) {
+      clearTimeout(this._previewTrailingTimer);
+      this._previewTrailingTimer = null;
+    }
     // Restore original brightness for each light
     for (const [entityId, brightness] of this._previewRestoreBrightness) {
       if (brightness === null) {
@@ -1027,8 +1032,23 @@ export class LightenerCurveCard extends LitElement {
   private _previewLights(position: number): void {
     if (!this._previewActive || !this._hass) return;
     const now = Date.now();
-    if (now - this._lastPreviewTime < this._PREVIEW_INTERVAL_MS) return;
+    const elapsed = now - this._lastPreviewTime;
+    if (elapsed < this._PREVIEW_INTERVAL_MS) {
+      // Schedule a trailing-edge call so the final position is never dropped
+      if (!this._previewTrailingTimer) {
+        this._previewTrailingTimer = setTimeout(() => {
+          this._previewTrailingTimer = null;
+          this._previewLights(position);
+        }, this._PREVIEW_INTERVAL_MS - elapsed);
+      }
+      return;
+    }
     if (this._previewRafPending) return;
+    // Cancel any trailing timer since we're about to send
+    if (this._previewTrailingTimer) {
+      clearTimeout(this._previewTrailingTimer);
+      this._previewTrailingTimer = null;
+    }
     this._previewRafPending = true;
 
     requestAnimationFrame(() => {
