@@ -70,6 +70,7 @@ jobs:
           --cov=custom_components/lightener
           --cov-report=xml
           --cov-report=term
+          --cov-fail-under=60
 
       - name: "Upload Python coverage"
         if: always()
@@ -110,7 +111,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: "Tests with coverage"
-        run: npx vitest run --coverage
+        run: npm run test:coverage
 
       - name: "Upload frontend coverage"
         if: always()

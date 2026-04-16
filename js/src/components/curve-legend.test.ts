@@ -211,4 +211,15 @@ describe('curve-legend', () => {
     expect(outerSpy).toHaveBeenCalledTimes(1);
     document.body.removeEventListener('select-curve', outerSpy);
   });
+
+  it('bubbles and composes toggle-curve across shadow boundary', async () => {
+    const el = makeLegend();
+    await el.updateComplete;
+    const outerSpy = vi.fn();
+    document.body.addEventListener('toggle-curve', outerSpy);
+    const eye = el.renderRoot.querySelector<SVGElement>('.eye-icon')!;
+    eye.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    expect(outerSpy).toHaveBeenCalledTimes(1);
+    document.body.removeEventListener('toggle-curve', outerSpy);
+  });
 });

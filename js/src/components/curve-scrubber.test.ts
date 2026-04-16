@@ -326,6 +326,61 @@ describe('curve-scrubber — pointer drag', () => {
     thumb.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
     expect(endSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('updates position and dispatches scrubber-move on pointermove while dragging', async () => {
+    const el = makeScrubber();
+    await el.updateComplete;
+    const moveSpy = vi.fn();
+    el.addEventListener('scrubber-move', moveSpy);
+
+    const thumb = el.renderRoot.querySelector('.thumb')! as HTMLElement;
+    const track = el.renderRoot.querySelector('.track-area')! as HTMLElement;
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 20,
+      width: 100,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    (thumb as unknown as { setPointerCapture: (id: number) => void }).setPointerCapture = () => {};
+
+    thumb.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: 10 })
+    );
+    await el.updateComplete;
+    const initialCalls = moveSpy.mock.calls.length;
+
+    thumb.dispatchEvent(
+      new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: 60 })
+    );
+    await el.updateComplete;
+    expect(moveSpy.mock.calls.length).toBeGreaterThan(initialCalls);
+    expect(moveSpy.mock.calls.at(-1)![0].detail.position).toBe(60);
+
+    thumb.dispatchEvent(
+      new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: 90 })
+    );
+    await el.updateComplete;
+    expect(moveSpy.mock.calls.at(-1)![0].detail.position).toBe(90);
+  });
+
+  it('ignores pointermove when not dragging', async () => {
+    const el = makeScrubber();
+    await el.updateComplete;
+    const moveSpy = vi.fn();
+    el.addEventListener('scrubber-move', moveSpy);
+    const thumb = el.renderRoot.querySelector('.thumb')! as HTMLElement;
+
+    thumb.dispatchEvent(
+      new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: 60 })
+    );
+    await el.updateComplete;
+    expect(moveSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('curve-scrubber — track click', () => {
