@@ -40,8 +40,10 @@ source = ["custom_components/lightener"]
 branch = true
 
 [tool.coverage.report]
-# Floor only; raise as PR-B shrinks light.py and brightness helpers get tested.
-fail_under = 60
+# Floor only. Baseline after PR-B (brightness helpers extracted + tested): 94.74%.
+# CLAUDE.md rule: keep ~3-6pp cushion above baseline to avoid flakes on small
+# refactors. Raise when baseline moves.
+fail_under = 90
 show_missing = true
 exclude_lines = [
     "pragma: no cover",
