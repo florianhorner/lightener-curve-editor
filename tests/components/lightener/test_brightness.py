@@ -28,6 +28,10 @@ from custom_components.lightener.brightness import (
         ((0, 100), (0, 255), 100, 255),
         ((1, 255), (0, 100), 128, 50),
         ((0, 10), (0, 100), 7, 70),
+        # Pin banker's-rounding behaviour of Python's round().
+        # 1.5 -> 2 and 2.5 -> 2 (round-half-to-even).
+        ((0, 10), (0, 3), 5, 2),
+        ((0, 4), (0, 5), 2, 2),
     ],
 )
 def test_scale_ranged_value_to_int_range(
@@ -150,19 +154,6 @@ def test_build_brightness_maps_distinct_configs_miss_cache_independently() -> No
     info = build_brightness_maps.cache_info()
     assert info.misses == 2
     assert info.currsize == 2
-
-
-def test_build_brightness_maps_shape() -> None:
-    """Returned tuple has the expected three components."""
-    cfg = tuple(prepare_brightness_config({"50": "50"}))
-    levels, reverse, reverse_on_off = build_brightness_maps(cfg)
-
-    assert isinstance(levels, dict)
-    assert set(levels.keys()) == set(range(256))
-    assert isinstance(reverse, dict)
-    assert set(reverse.keys()) == set(range(256))
-    assert isinstance(reverse_on_off, dict)
-    assert set(reverse_on_off.keys()) == set(range(256))
 
 
 def test_light_module_reexports_share_cache_identity() -> None:

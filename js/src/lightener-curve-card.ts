@@ -7,6 +7,9 @@ import { CURVE_PRESETS, presetPolylinePoints, type PresetDef } from './utils/pre
 import {
   INITIAL_SAVE_STATE,
   type SaveState,
+  errorMessage as saveErrorMessage,
+  isSaved,
+  isSaving,
   reduce as reduceSave,
 } from './utils/save-lifecycle.js';
 import './components/curve-graph.js';
@@ -197,13 +200,13 @@ export class LightenerCurveCard extends LitElement {
   @state() private _loading = false;
 
   private get _saving(): boolean {
-    return this._saveState.phase === 'saving';
+    return isSaving(this._saveState);
   }
   private get _saveSuccess(): boolean {
-    return this._saveState.phase === 'saved';
+    return isSaved(this._saveState);
   }
   private get _saveError(): string | null {
-    return this._saveState.phase === 'error' ? this._saveState.message : null;
+    return saveErrorMessage(this._saveState);
   }
 
   private _dispatchSave(action: Parameters<typeof reduceSave>[1]): void {

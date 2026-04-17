@@ -10,7 +10,7 @@ import {
   reduce,
 } from './save-lifecycle';
 
-const idle: SaveState = { phase: 'idle' };
+const idle: SaveState = INITIAL_SAVE_STATE;
 const dirty: SaveState = { phase: 'dirty' };
 const saving: SaveState = { phase: 'saving' };
 const saved: SaveState = { phase: 'saved' };
