@@ -172,11 +172,12 @@ describe('curve-legend', () => {
     const el = makeLegend();
     await el.updateComplete;
     const items = el.renderRoot.querySelectorAll<HTMLElement>('.legend-item');
+    const root = el.renderRoot as ShadowRoot;
     items[0]!.focus();
     items[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-    expect(el.renderRoot.activeElement).toBe(items[1]);
+    expect(root.activeElement).toBe(items[1]);
     items[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
-    expect(el.renderRoot.activeElement).toBe(items[0]);
+    expect(root.activeElement).toBe(items[0]);
   });
 
   it('dispatches toggle-curve on eye Enter/Space keys', async () => {

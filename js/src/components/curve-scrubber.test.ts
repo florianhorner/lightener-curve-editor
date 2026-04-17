@@ -359,13 +359,13 @@ describe('curve-scrubber — pointer drag', () => {
     );
     await el.updateComplete;
     expect(moveSpy.mock.calls.length).toBeGreaterThan(initialCalls);
-    expect(moveSpy.mock.calls.at(-1)![0].detail.position).toBe(60);
+    expect(moveSpy.mock.calls[moveSpy.mock.calls.length - 1]![0].detail.position).toBe(60);
 
     thumb.dispatchEvent(
       new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: 90 })
     );
     await el.updateComplete;
-    expect(moveSpy.mock.calls.at(-1)![0].detail.position).toBe(90);
+    expect(moveSpy.mock.calls[moveSpy.mock.calls.length - 1]![0].detail.position).toBe(90);
   });
 
   it('ignores pointermove when not dragging', async () => {
