@@ -11,8 +11,10 @@
  *   - A `dirty` action does not override a visible `saved` or `error` banner.
  *     The banner clears when its effect completes (success timer fires → the
  *     element dispatches `save-clear`, or the user clicks save → `save-start`).
- *   - `save-start` is accepted from `dirty`, `saved`, and `error` so the user
- *     can re-save during the success-banner window or retry after an error.
+ *   - `save-start` is accepted from every non-saving phase so the user can
+ *     re-save during the success-banner window, retry after an error, or
+ *     trigger a programmatic save when the reducer has returned to idle
+ *     (the pre-refactor `_onSave` had no dirty guard — this preserves that).
  */
 
 export type SaveState =
@@ -42,7 +44,7 @@ export function reduce(state: SaveState, action: SaveAction): SaveState {
       return state;
 
     case 'save-start':
-      if (state.phase === 'idle' || state.phase === 'saving') return state;
+      if (state.phase === 'saving') return state;
       return { phase: 'saving' };
 
     case 'save-success':

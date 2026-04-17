@@ -55,6 +55,7 @@ describe('save-lifecycle reducer', () => {
     const start: SaveAction = { type: 'save-start' };
 
     it.each<[string, SaveState]>([
+      ['idle', idle],
       ['dirty', dirty],
       ['saved', saved],
       ['error', errored],
@@ -62,11 +63,8 @@ describe('save-lifecycle reducer', () => {
       expect(reduce(from, start)).toEqual({ phase: 'saving' });
     });
 
-    it.each<[string, SaveState]>([
-      ['idle', idle],
-      ['saving', saving],
-    ])('ignores from %s', (_label, from) => {
-      expect(reduce(from, start)).toBe(from);
+    it('ignores from saving (already in flight)', () => {
+      expect(reduce(saving, start)).toBe(saving);
     });
   });
 

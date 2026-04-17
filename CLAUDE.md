@@ -39,13 +39,13 @@ CI enforces minimum coverage on both sides. Gates are floors (not strict
 ratchets) set 3-6pp below measured baseline — they catch meaningful
 regressions without flagging small refactors.
 
-- **Python:** `pyproject.toml` `[tool.coverage.report] fail_under = 60`
-  (baseline ~94%). Enforced in `.github/workflows/lint.yml` pytest job via
-  `--cov-fail-under=60`.
+- **Python:** `pyproject.toml` `[tool.coverage.report] fail_under = 90`
+  (baseline ~94.74% after PR-B). Enforced in `.github/workflows/lint.yml`
+  pytest job via `--cov-fail-under=90`.
 - **Frontend:** `js/vitest.config.ts` thresholds `lines: 75`, `branches: 65`,
-  `functions: 75`, `statements: 75` (baseline 81/71/82/79). `src/lightener-curve-card.ts`
-  is excluded until PR-B extracts it; re-include once the god-file is under
-  400 lines and covered directly.
+  `functions: 75`, `statements: 75` (baseline 82.52/73.76/83.47/80.52).
+  `src/lightener-curve-card.ts` is excluded until the god-file is under
+  400 lines and can be covered directly.
 - **Raising a gate:** run the suite locally (`npm run test:coverage` or
   `pytest --cov=custom_components/lightener`), confirm the new floor has
   at least ~3pp cushion above the measured number, then bump the config.
