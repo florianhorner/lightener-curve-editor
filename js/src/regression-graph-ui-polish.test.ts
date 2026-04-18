@@ -245,9 +245,9 @@ describe('badge overflow expand/collapse', () => {
   });
 });
 
-// ── 5. Origin point ARIA label ───────────────────────────────────────
+// ── 5. Graph point ARIA labels ───────────────────────────────────────
 
-describe('origin point ARIA label', () => {
+describe('graph point ARIA labels', () => {
   beforeEach(() => {
     document.body.replaceChildren();
   });
@@ -261,13 +261,13 @@ describe('origin point ARIA label', () => {
     expect(originLabel).toContain('Cannot be moved horizontally');
   });
 
-  it('endpoint gets no "Space removes"', async () => {
+  it('endpoint gets "Space removes"', async () => {
     const graph = makeGraph();
     await graph.updateComplete;
 
     const hitCircles = graph.shadowRoot!.querySelectorAll<SVGCircleElement>('.hit-circle');
     const endpointLabel = hitCircles[hitCircles.length - 1].getAttribute('aria-label')!;
-    expect(endpointLabel).not.toContain('Space removes');
+    expect(endpointLabel).toContain('Space removes');
   });
 
   it('interior point gets "Space removes"', async () => {
@@ -281,7 +281,7 @@ describe('origin point ARIA label', () => {
   });
 });
 
-// ── 6. Defense-in-depth _onPointRemove ───────────────────────────────
+// ── 6. Point-remove guardrails ────────────────────────────────────────
 
 describe('defense-in-depth _onPointRemove', () => {
   beforeEach(() => {
@@ -310,7 +310,7 @@ describe('defense-in-depth _onPointRemove', () => {
     expect(removeEvents.length).toBe(0);
   });
 
-  it('removing the last index is rejected even with 3+ points', async () => {
+  it('removing the last index works when there are 3+ points', async () => {
     const graph = makeGraph();
     await graph.updateComplete;
 
@@ -322,13 +322,15 @@ describe('defense-in-depth _onPointRemove', () => {
     const hitCircles = graph.shadowRoot!.querySelectorAll<SVGCircleElement>('.hit-circle');
     const lastCircle = hitCircles[hitCircles.length - 1];
 
-    // Space on endpoint should NOT emit point-remove
+    // Space on endpoint should emit point-remove
     lastCircle.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
-    expect(removeEvents.length).toBe(0);
+    expect(removeEvents.length).toBe(1);
+    expect(removeEvents[0].detail).toMatchObject({ curveIndex: 0, pointIndex: 2 });
 
-    // Delete on endpoint should NOT emit point-remove
+    // Delete on endpoint should emit point-remove too
     lastCircle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
-    expect(removeEvents.length).toBe(0);
+    expect(removeEvents.length).toBe(2);
+    expect(removeEvents[1].detail).toMatchObject({ curveIndex: 0, pointIndex: 2 });
   });
 
   it('removing an interior point works', async () => {
@@ -504,5 +506,163 @@ describe('preview button hidden during cancel animation', () => {
 
     const previewRow = card.shadowRoot!.querySelector('.preview-toggle-row');
     expect(previewRow).not.toBeNull();
+  });
+});
+
+// ── 10. Save-success timer re-arm ────────────────────────────────────
+
+describe('save-success timer re-arm', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('keeps saved state until the newest timer expires on rapid re-save', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    try {
+      const curve: LightCurve = {
+        entityId: 'light.alpha',
+        friendlyName: 'Alpha',
+        controlPoints: [
+          { lightener: 0, target: 0 },
+          { lightener: 50, target: 75 },
+          { lightener: 100, target: 100 },
+        ],
+        visible: true,
+        color: '#2563eb',
+      };
+
+      const callWS = vi.fn(async () => ({}));
+      const card = document.createElement('lightener-curve-card') as LightenerCurveCard;
+      (card as unknown as Record<string, unknown>)['_hass'] = {
+        user: { is_admin: true },
+        states: {},
+        callWS,
+        callService: () => Promise.resolve(),
+      };
+      (card as unknown as Record<string, unknown>)['_config'] = { entity: 'light.group' };
+      (card as unknown as Record<string, LightCurve[]>)['_curves'] = [curve];
+      (card as unknown as Record<string, LightCurve[]>)['_originalCurves'] = [curve];
+      (card as unknown as Record<string, () => void>)['_tryLoadCurves'] = vi.fn();
+
+      const save = () => (card as unknown as { _onSave: () => Promise<boolean> })['_onSave']();
+      const phase = () =>
+        (card as unknown as { _saveState: { phase: string } })['_saveState'].phase;
+
+      await save();
+      expect(phase()).toBe('saved');
+
+      vi.advanceTimersByTime(1500);
+      await save();
+      expect(phase()).toBe('saved');
+
+      vi.advanceTimersByTime(499); // t=1999, before first timer's original deadline
+      expect(phase()).toBe('saved');
+
+      vi.advanceTimersByTime(2); // t=2001, first timer would have fired if not cleared
+      expect(phase()).toBe('saved');
+
+      vi.advanceTimersByTime(1499); // t=3500, second timer expires
+      expect(phase()).toBe('idle');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ── 11. Preview restore branches ──────────────────────────────────────
+
+describe('preview restore branches', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  function makePreviewCard(
+    states: Record<string, { state: string; attributes: { brightness?: number } }>
+  ): {
+    card: LightenerCurveCard;
+    callService: ReturnType<typeof vi.fn>;
+  } {
+    const callService = vi.fn(() => Promise.resolve());
+    const card = document.createElement('lightener-curve-card') as LightenerCurveCard;
+    (card as unknown as Record<string, LightCurve[]>)['_curves'] = Object.keys(states).map(
+      (entityId, idx) => ({
+        entityId,
+        friendlyName: entityId,
+        controlPoints: [
+          { lightener: 0, target: 0 },
+          { lightener: 100, target: 100 },
+        ],
+        visible: true,
+        color: idx % 2 === 0 ? '#2563eb' : '#ef5350',
+      })
+    );
+    (card as unknown as Record<string, unknown>)['_hass'] = {
+      user: { is_admin: true },
+      states,
+      callWS: () => Promise.resolve({}),
+      callService,
+    };
+    (card as unknown as Record<string, (position: number) => void>)['_previewLights'] = vi.fn();
+    return { card, callService };
+  }
+
+  it('restores off state with turn_off', () => {
+    const { card, callService } = makePreviewCard({
+      'light.alpha': { state: 'off', attributes: {} },
+    });
+
+    (card as unknown as { _startPreview: () => void })['_startPreview']();
+    (card as unknown as { _stopPreview: () => void })['_stopPreview']();
+
+    expect(callService).toHaveBeenCalledTimes(1);
+    expect(callService).toHaveBeenCalledWith('light', 'turn_off', { entity_id: 'light.alpha' });
+  });
+
+  it('restores mixed groups with turn_off and turn_on brightness', () => {
+    const { card, callService } = makePreviewCard({
+      'light.alpha': { state: 'off', attributes: {} },
+      'light.beta': { state: 'on', attributes: { brightness: 200 } },
+    });
+
+    (card as unknown as { _startPreview: () => void })['_startPreview']();
+    (card as unknown as { _stopPreview: () => void })['_stopPreview']();
+
+    expect(callService).toHaveBeenCalledTimes(2);
+    expect(callService).toHaveBeenNthCalledWith(1, 'light', 'turn_off', {
+      entity_id: 'light.alpha',
+    });
+    expect(callService).toHaveBeenNthCalledWith(2, 'light', 'turn_on', {
+      entity_id: 'light.beta',
+      brightness: 200,
+    });
+  });
+
+  it('preserves brightness 0 as turn_on brightness 0', () => {
+    const { card, callService } = makePreviewCard({
+      'light.alpha': { state: 'on', attributes: { brightness: 0 } },
+    });
+
+    (card as unknown as { _startPreview: () => void })['_startPreview']();
+    (card as unknown as { _stopPreview: () => void })['_stopPreview']();
+
+    expect(callService).toHaveBeenCalledTimes(1);
+    expect(callService).toHaveBeenCalledWith('light', 'turn_on', {
+      entity_id: 'light.alpha',
+      brightness: 0,
+    });
+  });
+
+  it('restores on/off-only lights with turn_on and no brightness argument', () => {
+    const { card, callService } = makePreviewCard({
+      'light.alpha': { state: 'on', attributes: {} },
+    });
+
+    (card as unknown as { _startPreview: () => void })['_startPreview']();
+    (card as unknown as { _stopPreview: () => void })['_stopPreview']();
+
+    expect(callService).toHaveBeenCalledTimes(1);
+    expect(callService).toHaveBeenCalledWith('light', 'turn_on', { entity_id: 'light.alpha' });
   });
 });

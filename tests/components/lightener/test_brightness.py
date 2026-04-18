@@ -57,13 +57,31 @@ def test_translate_config_to_brightness_rescales_0_100_to_1_255() -> None:
 
 
 def test_prepare_brightness_config_adds_endpoints_and_sorts() -> None:
-    """Defaults for 0 and 255 are injected; output is sorted by key."""
+    """0 is always injected and missing 255 flattens to the last configured target."""
+    translated = translate_config_to_brightness({"50": "50"})
+    expected_last_target = translated[max(translated)]
     result = prepare_brightness_config({"50": "50"})
     assert result[0] == (0, 0)
-    assert result[-1][0] == 255  # max key is 255
+    assert result[-1] == (255, expected_last_target)
     # Sorted ascending
     keys = [k for k, _ in result]
     assert keys == sorted(keys)
+
+
+def test_prepare_brightness_config_flattens_missing_max_to_last_target() -> None:
+    """A missing max endpoint is synthesized as 255 -> last_target, not 255 -> 255."""
+    translated = translate_config_to_brightness({"50": "40"})
+    expected_last_target = translated[max(translated)]
+
+    result = prepare_brightness_config({"50": "40"})
+
+    assert result[-1] == (255, expected_last_target)
+    assert result[-1][1] != 255
+
+
+def test_prepare_brightness_config_empty_input_defaults_to_full_scale() -> None:
+    """Empty configs still get the canonical endpoints."""
+    assert prepare_brightness_config({}) == [(0, 0), (255, 255)]
 
 
 def test_prepare_brightness_config_preserves_explicit_max() -> None:
@@ -80,7 +98,7 @@ def test_create_brightness_map_fills_full_range() -> None:
     m = create_brightness_map(config)
     assert set(m.keys()) == set(range(256))
     assert m[0] == 0
-    assert m[255] == 255
+    assert m[255] == config[-1][1]
 
 
 def test_create_brightness_map_is_monotonic_for_linear_config() -> None:

@@ -173,7 +173,7 @@ async def test_lightener_light_turn_on_go_off_if_brightness_0(
 async def test_lightener_light_turn_on_translate_brightness(
     hass: HomeAssistant, create_lightener
 ):
-    """Test that turned on sends brightness 0 if the controlled light is on."""
+    """Missing 100 endpoint flattens to last target, so high inputs can still turn off."""
 
     lightener: LightenerLight = await create_lightener(
         config={
@@ -186,8 +186,7 @@ async def test_lightener_light_turn_on_translate_brightness(
     await lightener.async_turn_on(brightness=192)
     await hass.async_block_till_done()
 
-    assert hass.states.get("light.test1").state == "on"
-    assert hass.states.get("light.test1").attributes["brightness"] == 129
+    assert hass.states.get("light.test1").state == "off"
 
 
 async def test_lightener_light_turn_on_go_off_if_brightness_0_transition(
@@ -332,7 +331,7 @@ async def test_lightener_light_async_update_group_state(
     assert lightener.is_on is True
     assert lightener.color_temp_kelvin == 3000
 
-    assert lightener.brightness == 255
+    assert lightener.brightness == 150
 
     hass.states.async_set(
         entity_id="light.test1", new_state="on", attributes={"brightness": 255}
@@ -340,7 +339,7 @@ async def test_lightener_light_async_update_group_state(
 
     lightener.async_update_group_state()
 
-    assert lightener.brightness == 255
+    assert lightener.brightness == 150
 
     hass.states.async_set(
         entity_id="light.test1", new_state="on", attributes={"brightness": 1}
@@ -348,7 +347,7 @@ async def test_lightener_light_async_update_group_state(
 
     lightener.async_update_group_state()
 
-    assert lightener.brightness == 128
+    assert lightener.brightness == 150
 
     hass.states.async_set(
         entity_id="light.test1", new_state="on", attributes={"brightness": 0}
@@ -403,7 +402,7 @@ async def test_lightener_light_async_update_group_state_unavailable(
 
     lightener.async_update_group_state()
 
-    assert lightener.brightness == 128
+    assert lightener.brightness == 150
 
 
 async def test_lightener_light_async_update_group_state_no_match_no_change(
@@ -435,7 +434,7 @@ async def test_lightener_light_async_update_group_state_no_match_no_change(
 
     # Matches
     test(0, 29, 3)
-    test(1, 255, 128)
+    test(1, 255, 150)
 
     # No matches
     test(129, 1, 150)
@@ -1038,7 +1037,7 @@ async def test_lightener_issue_97(hass: HomeAssistant, create_lightener):
     assert hass.states.get("light.test").attributes["brightness"] == 129
 
     assert hass.states.get("light.test1").state == "on"
-    assert hass.states.get("light.test_onoff").state == "on"
+    assert hass.states.get("light.test_onoff").state == "off"
 
     await lightener.async_turn_on(brightness=200)
     await hass.async_block_till_done()
@@ -1046,6 +1045,6 @@ async def test_lightener_issue_97(hass: HomeAssistant, create_lightener):
     assert hass.states.get("light.test").attributes["brightness"] == 200
 
     assert hass.states.get("light.test1").state == "on"
-    assert hass.states.get("light.test_onoff").state == "on"
+    assert hass.states.get("light.test_onoff").state == "off"
 
     assert hass.states.get("light.test1").attributes["brightness"] == 255

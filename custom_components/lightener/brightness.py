@@ -42,8 +42,12 @@ def prepare_brightness_config(config: dict) -> list[tuple[int, int]]:
     # Zero must always be zero.
     config[0] = 0
 
-    # If the maximum level is not present, add it.
-    config.setdefault(255, 255)
+    # If the maximum level is not present, flatten to the last configured target.
+    # This preserves user intent when the endpoint is absent.
+    if 255 not in config:
+        non_zero_keys = [k for k in config if k != 0]
+        last_target = config[max(non_zero_keys)] if non_zero_keys else 255
+        config[255] = last_target
 
     # Transform the dictionary into a list of tuples and sort it by the lightener level.
     return sorted(config.items())

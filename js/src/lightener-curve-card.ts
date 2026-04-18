@@ -20,6 +20,8 @@ import './components/curve-footer.js';
 const SAVE_SUCCESS_DISPLAY_MS = 2000;
 const CANCEL_ANIM_DURATION_MS = 300;
 
+type PreviewRestoreState = { state: 'off' } | { state: 'on'; brightness?: number };
+
 const WARNING_ICON = html`<svg
   class="status-icon"
   viewBox="0 0 24 24"
@@ -230,7 +232,7 @@ export class LightenerCurveCard extends LitElement {
   private _previewRafPending = false;
   private _previewTrailingTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastPreviewTime = 0;
-  private _previewRestoreBrightness: Map<string, number | null> = new Map();
+  private _previewRestoreBrightness: Map<string, PreviewRestoreState> = new Map();
   private _lastEmittedDirtyState = false;
 
   private get _embedded(): boolean {
@@ -960,10 +962,17 @@ export class LightenerCurveCard extends LitElement {
     for (const curve of this._curves) {
       const state = this._hass.states[curve.entityId];
       if (state) {
-        this._previewRestoreBrightness.set(
-          curve.entityId,
-          state.state === 'off' ? null : (state.attributes.brightness ?? null)
-        );
+        if (state.state === 'off') {
+          this._previewRestoreBrightness.set(curve.entityId, { state: 'off' });
+        } else if (typeof state.attributes.brightness === 'number') {
+          this._previewRestoreBrightness.set(curve.entityId, {
+            state: 'on',
+            brightness: state.attributes.brightness,
+          });
+        } else {
+          // On/off-only lights restore with turn_on and no brightness argument.
+          this._previewRestoreBrightness.set(curve.entityId, { state: 'on' });
+        }
       }
     }
     this._previewLights(this._scrubberPosition);
@@ -978,13 +987,18 @@ export class LightenerCurveCard extends LitElement {
       this._previewTrailingTimer = null;
     }
     // Restore original brightness for each light
-    for (const [entityId, brightness] of this._previewRestoreBrightness) {
-      if (brightness === null) {
+    for (const [entityId, restoreState] of this._previewRestoreBrightness) {
+      if (restoreState.state === 'off') {
         this._hass.callService('light', 'turn_off', { entity_id: entityId }).catch(() => {});
-      } else {
+      } else if (typeof restoreState.brightness === 'number') {
         this._hass
-          .callService('light', 'turn_on', { entity_id: entityId, brightness })
+          .callService('light', 'turn_on', {
+            entity_id: entityId,
+            brightness: restoreState.brightness,
+          })
           .catch(() => {});
+      } else {
+        this._hass.callService('light', 'turn_on', { entity_id: entityId }).catch(() => {});
       }
     }
     this._previewRestoreBrightness.clear();
@@ -1200,8 +1214,8 @@ export class LightenerCurveCard extends LitElement {
     const curve = this._curves[curveIndex];
     if (!curve) return;
     if (curve.controlPoints.length <= 2) return;
-    // Defense-in-depth: never remove origin or endpoint
-    if (pointIndex === 0 || pointIndex >= curve.controlPoints.length - 1) return;
+    // Defense-in-depth: never remove origin
+    if (pointIndex === 0) return;
 
     this._pushUndo();
     const curves = [...this._curves];
@@ -1259,6 +1273,9 @@ export class LightenerCurveCard extends LitElement {
       this._loaded = false;
       this._tryLoadCurves();
       this._dispatchSave({ type: 'save-success' });
+      if (this._saveSuccessTimer) {
+        clearTimeout(this._saveSuccessTimer);
+      }
       this._saveSuccessTimer = setTimeout(() => {
         this._dispatchSave({ type: 'save-clear' });
         this._saveSuccessTimer = null;
