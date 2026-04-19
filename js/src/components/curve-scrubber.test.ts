@@ -418,6 +418,30 @@ describe('curve-scrubber — pointer drag', () => {
   });
 });
 
+describe('curve-scrubber — badge-click event', () => {
+  it('dispatches badge-click with entityId and value when interactive badge is clicked', async () => {
+    const el = makeScrubber({ readOnly: false });
+    await el.updateComplete;
+    const spy = vi.fn();
+    el.addEventListener('badge-click', spy);
+
+    const btn = el.renderRoot.querySelector<HTMLButtonElement>('button.badge.interactive')!;
+    btn.click();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const detail = spy.mock.calls[0]![0].detail as { entityId: string; value: number };
+    expect(detail.entityId).toMatch(/^light\./);
+    expect(typeof detail.value).toBe('number');
+  });
+
+  it('does not render interactive badges when readOnly=true', async () => {
+    const el = makeScrubber({ readOnly: true });
+    await el.updateComplete;
+    const btns = el.renderRoot.querySelectorAll('button.badge.interactive');
+    expect(btns.length).toBe(0);
+  });
+});
+
 describe('curve-scrubber — track click', () => {
   it('updates position based on click clientX relative to track rect', async () => {
     const el = makeScrubber();

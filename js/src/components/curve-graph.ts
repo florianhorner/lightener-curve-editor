@@ -535,7 +535,7 @@ export class CurveGraph extends LitElement {
     return svg`
       <defs>
         <clipPath id="graph-area-${this._uid}">
-          <rect x="${PAD_LEFT}" y="${PAD_TOP}" width="${GRAPH_W}" height="${GRAPH_H}" />
+          <rect x="${PAD_LEFT - 30}" y="${PAD_TOP - 30}" width="${GRAPH_W + 60}" height="${GRAPH_H + 60}" />
         </clipPath>
       </defs>
       <!-- Diagonal reference line (1:1) -->
