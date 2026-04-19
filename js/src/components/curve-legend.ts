@@ -220,7 +220,6 @@ export class CurveLegend extends LitElement {
                 role="option"
                 tabindex="0"
                 aria-selected=${this.selectedCurveId === curve.entityId}
-                aria-label="${curve.friendlyName}"
                 @click=${() => this._select(curve.entityId)}
                 @keydown=${(e: KeyboardEvent) => this._onItemKeyDown(e, curve.entityId)}
                 style="--accent-color: ${curve.color}"

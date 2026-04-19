@@ -288,6 +288,41 @@ describe('curve-scrubber — readOnly guard', () => {
     );
     expect(startSpy).not.toHaveBeenCalled();
   });
+
+  it('scrubber slider is non-focusable and aria-disabled when readOnly', async () => {
+    const el = makeScrubber({ readOnly: true });
+    await el.updateComplete;
+    const track = el.renderRoot.querySelector('.track-area')!;
+    expect(track.getAttribute('tabindex')).toBe('-1');
+    expect(track.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('strips interactive attributes from badges when readOnly=true', async () => {
+    const el = makeScrubber({ readOnly: true });
+    await el.updateComplete;
+    const badges = [...el.renderRoot.querySelectorAll('[data-value-badge="true"]')];
+    expect(badges.length).toBeGreaterThan(0);
+    badges.forEach((b) => {
+      expect(b.tagName).toBe('DIV');
+      expect(b.getAttribute('tabindex')).toBeNull();
+      expect(b.getAttribute('role')).toBeNull();
+      expect(b.getAttribute('aria-label')).toBeNull();
+      expect(b.classList.contains('interactive')).toBe(false);
+    });
+  });
+
+  it('renders badges as interactive <button>s when not readOnly', async () => {
+    const el = makeScrubber({ readOnly: false });
+    await el.updateComplete;
+    const badges = [...el.renderRoot.querySelectorAll('[data-value-badge="true"]')];
+    expect(badges.length).toBeGreaterThan(0);
+    badges.forEach((b) => {
+      expect(b.tagName).toBe('BUTTON');
+      expect(b.getAttribute('type')).toBe('button');
+      expect(b.classList.contains('interactive')).toBe(true);
+      expect(b.getAttribute('aria-label')).toMatch(/^Set .* to \d+%$/);
+    });
+  });
 });
 
 describe('curve-scrubber — pointer drag', () => {
@@ -456,6 +491,42 @@ describe('curve-scrubber — overflow indicator', () => {
     await el.updateComplete;
     expect(btn.textContent?.trim()).toBe('Collapse');
     expect(btn.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('counts a straddling badge as hidden after the snap (not undercount)', async () => {
+    // Three badges laid out at tops 0 / 22 / 44, each 20 tall, clipHeight 46.
+    // Third badge's top (44) is within 46 but bottom (64) exceeds. Under the old
+    // logic it was excluded from hiddenCount and then hidden by the snap — so
+    // "+N more" undercounted. New logic: snap to the last fully-visible badge
+    // (second, bottom 42), then count any badge whose bottom exceeds snap.
+    const curve = (name: string, color: string): LightCurve => ({
+      entityId: `light.${name}`,
+      friendlyName: name,
+      controlPoints: [
+        { lightener: 0, target: 0 },
+        { lightener: 100, target: 100 },
+      ],
+      visible: true,
+      color,
+    });
+    const el = makeScrubber({
+      curves: [curve('A', '#2563eb'), curve('B', '#ef5350'), curve('C', '#ffca28')],
+    });
+    await el.updateComplete;
+    const container = el.renderRoot.querySelector<HTMLElement>('.value-badges')!;
+    const badges = container.querySelectorAll<HTMLElement>('.badge');
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 46 });
+    badges.forEach((b, i) => {
+      Object.defineProperty(b, 'offsetTop', { configurable: true, value: i * 22 });
+      Object.defineProperty(b, 'offsetHeight', { configurable: true, value: 20 });
+    });
+
+    roInstances[0]!.trigger();
+    await el.updateComplete;
+
+    const btn = el.renderRoot.querySelector<HTMLButtonElement>('.overflow-indicator')!;
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent?.trim()).toBe('+1 more');
   });
 });
 

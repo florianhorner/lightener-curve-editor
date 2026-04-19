@@ -656,7 +656,7 @@ export class CurveGraph extends LitElement {
             cx="${x}" cy="${cy}"
             r="4"
             fill="${c.color}"
-            filter="url(#scrubber-glow-${c.color.replace('#', '')})"
+            filter="url(#scrubber-glow-${c.color.replace('#', '')}-${this._uid})"
             pointer-events="none"
           />
         `;
@@ -687,7 +687,7 @@ export class CurveGraph extends LitElement {
         ` L${toSvgX(prepared[prepared.length - 1].lightener)},${toSvgY(0)}` +
         ` L${toSvgX(0)},${toSvgY(0)} Z`;
 
-      const gradientId = `grad-${curveIdx}`;
+      const gradientId = `grad-${curveIdx}-${this._uid}`;
 
       // Dash patterns for colorblind accessibility (cycle through 5 patterns)
       const dashArray = DASH_PATTERNS[curveIdx % DASH_PATTERNS.length];
@@ -873,7 +873,7 @@ export class CurveGraph extends LitElement {
           ${this.curves
             .filter((c) => c.visible)
             .map((c) => {
-              const id = `scrubber-glow-${c.color.replace('#', '')}`;
+              const id = `scrubber-glow-${c.color.replace('#', '')}-${this._uid}`;
               return svg`
               <filter id="${id}" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />

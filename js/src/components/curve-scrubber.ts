@@ -132,11 +132,27 @@ export class CurveScrubber extends LitElement {
       background: rgba(128, 128, 128, 0.06);
       white-space: nowrap;
       min-width: 0;
-      cursor: pointer;
-      transition: background 0.12s ease;
     }
-    .badge:hover {
+    button.badge.interactive {
+      cursor: pointer;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #2563eb) 30%, transparent);
+      transition:
+        background 0.12s ease,
+        box-shadow 0.12s ease;
+      border: none;
+      font: inherit;
+      color: inherit;
+    }
+    button.badge.interactive:hover {
       background: rgba(128, 128, 128, 0.14);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #2563eb) 60%, transparent);
+    }
+    button.badge.interactive:focus {
+      outline: none;
+    }
+    button.badge.interactive:focus-visible {
+      outline: 2px solid var(--primary-color, #2563eb);
+      outline-offset: 2px;
     }
     .badge-dot {
       width: 6px;
@@ -286,6 +302,13 @@ export class CurveScrubber extends LitElement {
     this._emitPosition();
   }
 
+  private _renderBadgeContent(bar: { color: string; value: number }) {
+    return html`
+      <span class="badge-dot" style="background: ${bar.color}"></span>
+      <span style="color: ${this._badgeTextColor(bar.color)}">${bar.value}%</span>
+    `;
+  }
+
   private _onBadgeClick(entityId: string, value: number): void {
     this.dispatchEvent(
       new CustomEvent('badge-click', {
@@ -351,12 +374,6 @@ export class CurveScrubber extends LitElement {
     const clipHeight = container.clientHeight;
     const badges = [...container.querySelectorAll<HTMLElement>('.badge[data-value-badge="true"]')];
 
-    // Only count badges whose top edge is at/beyond the clip boundary — those
-    // are fully hidden. A badge whose top is inside the clip but whose bottom
-    // exceeds it is partially visible; counting it inflates the "+N more" number
-    // and makes the expansion feel like it showed fewer items than promised.
-    const hiddenCount = badges.filter((badge) => badge.offsetTop >= clipHeight).length;
-
     // Snap the max-height to the bottom of the last fully-visible badge so no
     // badge is shown half-cut. "Fully visible" = bottom edge within clipHeight.
     const lastFullyVisible = [...badges]
@@ -365,6 +382,13 @@ export class CurveScrubber extends LitElement {
     const snapped = lastFullyVisible
       ? lastFullyVisible.offsetTop + lastFullyVisible.offsetHeight
       : clipHeight;
+
+    // Count badges whose bottom exceeds the snapped boundary — those are the
+    // ones actually hidden by the snap. Counting against raw clipHeight would
+    // undercount when the last row is partially clipped.
+    const hiddenCount = badges.filter(
+      (badge) => badge.offsetTop + badge.offsetHeight > snapped
+    ).length;
 
     if (hiddenCount !== this._overflowCount) this._overflowCount = hiddenCount;
     if (snapped !== this._snappedMaxHeight) this._snappedMaxHeight = snapped;
@@ -380,7 +404,8 @@ export class CurveScrubber extends LitElement {
         <div
           class="track-area"
           role="slider"
-          tabindex="0"
+          tabindex="${this.readOnly ? -1 : 0}"
+          aria-disabled="${this.readOnly}"
           aria-label="Brightness scrubber"
           aria-valuemin="0"
           aria-valuemax="100"
@@ -411,26 +436,20 @@ export class CurveScrubber extends LitElement {
                 ? `max-height: ${this._snappedMaxHeight}px;`
                 : ''}"
           >
-            ${bars.map(
-              (bar) => html`
-                <div
-                  class="badge"
-                  data-value-badge="true"
-                  role="button"
-                  tabindex="0"
-                  aria-label="Set ${bar.name} to ${bar.value}%"
-                  @click=${() => this._onBadgeClick(bar.entityId, bar.value)}
-                  @keydown=${(e: KeyboardEvent) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      this._onBadgeClick(bar.entityId, bar.value);
-                    }
-                  }}
-                >
-                  <span class="badge-dot" style="background: ${bar.color}"></span>
-                  <span style="color: ${this._badgeTextColor(bar.color)}">${bar.value}%</span>
-                </div>
-              `
+            ${bars.map((bar) =>
+              this.readOnly
+                ? html`<div class="badge" data-value-badge="true">
+                    ${this._renderBadgeContent(bar)}
+                  </div>`
+                : html`<button
+                    type="button"
+                    class="badge interactive"
+                    data-value-badge="true"
+                    aria-label="Set ${bar.name} to ${bar.value}%"
+                    @click=${() => this._onBadgeClick(bar.entityId, bar.value)}
+                  >
+                    ${this._renderBadgeContent(bar)}
+                  </button>`
             )}
           </div>
           ${this._overflowCount > 0 || this._expanded
