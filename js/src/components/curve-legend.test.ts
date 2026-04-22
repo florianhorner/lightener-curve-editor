@@ -493,5 +493,31 @@ describe('curve-legend', () => {
       const remove = el.renderRoot.querySelector<HTMLButtonElement>('.remove-icon')!;
       expect(remove.disabled).toBe(true);
     });
+
+    it('clears pending confirm row when canManage flips to false', async () => {
+      const el = makeLegend();
+      el.canManage = true;
+      await el.updateComplete;
+      el.renderRoot.querySelector<HTMLButtonElement>('.remove-icon')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.confirm-row')).not.toBeNull();
+
+      el.canManage = false;
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.confirm-row')).toBeNull();
+    });
+
+    it('clears pending confirm row when managing flips to true', async () => {
+      const el = makeLegend();
+      el.canManage = true;
+      await el.updateComplete;
+      el.renderRoot.querySelector<HTMLButtonElement>('.remove-icon')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.confirm-row')).not.toBeNull();
+
+      el.managing = true;
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.confirm-row')).toBeNull();
+    });
   });
 });

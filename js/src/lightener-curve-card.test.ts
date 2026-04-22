@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
 
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { LightenerCurveCard } from './lightener-curve-card.js';
 import type { Hass } from './utils/types.js';
+
+// LightenerCurveCard.connectedCallback adds global keydown + beforeunload listeners
+// on `window`. Without cleanup they accumulate across tests and can make this suite
+// order-dependent. Unmounting every card between tests runs disconnectedCallback,
+// which removes those listeners.
+afterEach(() => {
+  document.body.querySelectorAll('lightener-curve-card').forEach((el) => el.remove());
+});
 
 beforeAll(async () => {
   // curve-graph reads window.matchMedia during connectedCallback; jsdom doesn't ship it.

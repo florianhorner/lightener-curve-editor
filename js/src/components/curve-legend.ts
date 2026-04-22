@@ -440,8 +440,21 @@ export class CurveLegend extends LitElement {
     );
   }
 
+  protected willUpdate(changed: Map<PropertyKey, unknown>): void {
+    super.willUpdate(changed);
+    // If management is revoked or a WS call starts, drop any pending confirm so
+    // the destructive row can't emit remove-light after the gate closes.
+    if (
+      (changed.has('canManage') || changed.has('managing')) &&
+      (!this.canManage || this.managing)
+    ) {
+      this._confirmingRemove = null;
+    }
+  }
+
   private _startRemove(e: Event, entityId: string) {
     e.stopPropagation();
+    if (!this.canManage || this.managing) return;
     if (this.curves.length <= 1) return;
     this._confirmingRemove = entityId;
   }
@@ -453,6 +466,10 @@ export class CurveLegend extends LitElement {
 
   private _confirmRemove(e: Event, entityId: string) {
     e.stopPropagation();
+    if (!this.canManage || this.managing) {
+      this._confirmingRemove = null;
+      return;
+    }
     this._confirmingRemove = null;
     this.dispatchEvent(
       new CustomEvent('remove-light', {
@@ -586,7 +603,8 @@ export class CurveLegend extends LitElement {
         <div class="legend-label">Lights</div>
         <div class="legend" role="listbox" aria-label="Light curves">
           ${this.curves.map((curve, idx) => {
-            const confirming = this._confirmingRemove === curve.entityId;
+            const confirming =
+              this.canManage && !this.managing && this._confirmingRemove === curve.entityId;
             return html`
               <div
                 class="legend-item ${curve.visible ? '' : 'hidden'} ${this.selectedCurveId ===

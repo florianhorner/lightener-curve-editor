@@ -1,5 +1,6 @@
 """Tests for WebSocket API."""
 
+from unittest.mock import patch
 from uuid import uuid4
 
 from homeassistant.core import HomeAssistant
@@ -666,3 +667,83 @@ async def test_remove_light_requires_admin(
 
     assert result["success"] is False
     assert result["error"]["code"] == "unauthorized"
+
+
+async def test_add_light_reports_reload_failure(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """ws_add_light surfaces reload_failed when async_reload returns False.
+
+    The config entry data has already been updated by the time reload runs;
+    if reload fails (unload or setup returns False) the handler must not
+    silently report success.
+    """
+    await _setup_lightener(hass)
+
+    ws = await hass_ws_client(hass)
+    with patch.object(hass.config_entries, "async_reload", return_value=False):
+        await ws.send_json(
+            {
+                "id": 1,
+                "type": "lightener/add_light",
+                "entity_id": "light.test",
+                "controlled_entity_id": "light.new_light",
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "reload_failed"
+
+
+async def test_remove_light_reports_reload_failure(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """ws_remove_light surfaces reload_failed when async_reload returns False."""
+    await _setup_lightener(
+        hass,
+        {
+            "light.test1": {"brightness": {"100": "100"}},
+            "light.test2": {"brightness": {"100": "80"}},
+        },
+    )
+
+    ws = await hass_ws_client(hass)
+    with patch.object(hass.config_entries, "async_reload", return_value=False):
+        await ws.send_json(
+            {
+                "id": 1,
+                "type": "lightener/remove_light",
+                "entity_id": "light.test",
+                "controlled_entity_id": "light.test1",
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "reload_failed"
+
+
+async def test_save_curves_reports_reload_failure(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """ws_save_curves surfaces reload_failed when async_reload returns False."""
+    await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"60": "100", "10": "50"}}},
+    )
+
+    ws = await hass_ws_client(hass)
+    with patch.object(hass.config_entries, "async_reload", return_value=False):
+        await ws.send_json(
+            {
+                "id": 1,
+                "type": "lightener/save_curves",
+                "entity_id": "light.test",
+                "curves": {"light.test1": {"brightness": {"20": "80"}}},
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "reload_failed"

@@ -385,7 +385,19 @@ async def ws_save_curves(
     new_data["entities"] = new_entities
 
     hass.config_entries.async_update_entry(config_entry, data=new_data)
-    await hass.config_entries.async_reload(config_entry.entry_id)
+    reloaded = await hass.config_entries.async_reload(config_entry.entry_id)
+    if not reloaded:
+        metric(
+            _LOGGER,
+            "lightener.ws.save_curves.reload_failures_total",
+            "counter",
+            1,
+        )
+        end_span(_LOGGER, span, status="error", error_code="reload_failed")
+        connection.send_error(
+            msg["id"], "reload_failed", "Config entry reload failed"
+        )
+        return
 
     connection.send_result(msg["id"])
     duration_ms = (monotonic() - op_started) * 1000
@@ -526,7 +538,19 @@ async def ws_add_light(
     new_data["entities"] = new_entities
 
     hass.config_entries.async_update_entry(config_entry, data=new_data)
-    await hass.config_entries.async_reload(config_entry.entry_id)
+    reloaded = await hass.config_entries.async_reload(config_entry.entry_id)
+    if not reloaded:
+        metric(
+            _LOGGER,
+            "lightener.ws.add_light.reload_failures_total",
+            "counter",
+            1,
+        )
+        end_span(_LOGGER, span, status="error", error_code="reload_failed")
+        connection.send_error(
+            msg["id"], "reload_failed", "Config entry reload failed"
+        )
+        return
 
     connection.send_result(msg["id"], {"entities": new_entities})
     duration_ms = (monotonic() - op_started) * 1000
@@ -624,7 +648,19 @@ async def ws_remove_light(
     new_data["entities"] = new_entities
 
     hass.config_entries.async_update_entry(config_entry, data=new_data)
-    await hass.config_entries.async_reload(config_entry.entry_id)
+    reloaded = await hass.config_entries.async_reload(config_entry.entry_id)
+    if not reloaded:
+        metric(
+            _LOGGER,
+            "lightener.ws.remove_light.reload_failures_total",
+            "counter",
+            1,
+        )
+        end_span(_LOGGER, span, status="error", error_code="reload_failed")
+        connection.send_error(
+            msg["id"], "reload_failed", "Config entry reload failed"
+        )
+        return
 
     connection.send_result(msg["id"], {"entities": new_entities})
     duration_ms = (monotonic() - op_started) * 1000
