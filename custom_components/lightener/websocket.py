@@ -569,8 +569,8 @@ async def ws_add_light(
     new_data["entities"] = new_entities
 
     hass.config_entries.async_update_entry(config_entry, data=new_data)
-    _invalidate_entity_list_cache(hass)
     reloaded = await hass.config_entries.async_reload(config_entry.entry_id)
+    _invalidate_entity_list_cache(hass)
     if not reloaded:
         metric(
             _LOGGER,
@@ -678,8 +678,8 @@ async def ws_remove_light(
     new_data["entities"] = new_entities
 
     hass.config_entries.async_update_entry(config_entry, data=new_data)
-    _invalidate_entity_list_cache(hass)
     reloaded = await hass.config_entries.async_reload(config_entry.entry_id)
+    _invalidate_entity_list_cache(hass)
     if not reloaded:
         metric(
             _LOGGER,
