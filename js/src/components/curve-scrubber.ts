@@ -127,7 +127,7 @@ export class CurveScrubber extends LitElement {
       font-size: 11px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
-      background: rgba(128, 128, 128, 0.06);
+      background: rgba(128, 128, 128, 0.1);
       white-space: nowrap;
       min-width: 0;
     }
