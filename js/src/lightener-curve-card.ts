@@ -1372,6 +1372,7 @@ export class LightenerCurveCard extends LitElement {
     const curves = this._curves.map((c) =>
       c.entityId === entityId ? { ...c, visible: !c.visible } : c
     );
+    // Intentionally no _dirtyVersion++ — visibility is local UI state, not persisted to backend.
     this._curves = curves;
     // If hiding the selected curve, clear selection
     if (this._selectedCurveId === entityId) {
