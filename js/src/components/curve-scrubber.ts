@@ -374,6 +374,12 @@ export class CurveScrubber extends LitElement {
     const clipHeight = container.clientHeight;
     const badges = [...container.querySelectorAll<HTMLElement>('.badge[data-value-badge="true"]')];
 
+    // Bail if badges haven't been laid out yet — offsetHeight is 0 before the
+    // browser's first layout pass. Measuring then snaps max-height to 0 which
+    // collapses the container, causing the ResizeObserver to report all badges
+    // as overflowing (the "+N more" wrong-count bug).
+    if (badges.length > 0 && badges.some((b) => b.offsetHeight === 0)) return;
+
     // Snap the max-height to the bottom of the last fully-visible badge so no
     // badge is shown half-cut. "Fully visible" = bottom edge within clipHeight.
     const lastFullyVisible = [...badges]
