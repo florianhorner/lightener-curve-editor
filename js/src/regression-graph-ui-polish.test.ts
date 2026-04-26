@@ -185,15 +185,14 @@ describe('sampleCurveAt clamping', () => {
   });
 
   it('returns values clamped to [0, 100] for out-of-range input', () => {
-    // Extreme positions that might cause overshoot in the cubic interpolation
+    // Extreme positions should be clamped before backend-linear sampling
     expect(sampleCurveAt(controlPoints, -50)).toBeGreaterThanOrEqual(0);
     expect(sampleCurveAt(controlPoints, -50)).toBeLessThanOrEqual(100);
     expect(sampleCurveAt(controlPoints, 200)).toBeGreaterThanOrEqual(0);
     expect(sampleCurveAt(controlPoints, 200)).toBeLessThanOrEqual(100);
   });
 
-  it('clamps overshoot from steep ramp curves', () => {
-    // A steep ramp can cause cubic Hermite overshoot beyond 100
+  it('keeps steep ramp curves inside the backend brightness range', () => {
     const steepPoints = [
       { lightener: 0, target: 0 },
       { lightener: 5, target: 100 },
@@ -611,7 +610,7 @@ describe('preview restore state', () => {
     rafSpy.mockRestore();
   });
 
-  it('previews the smooth curve brightness for a peak curve', async () => {
+  it('previews the backend-linear brightness for a peak curve', async () => {
     const entityId = 'light.preview_peak';
     const { card, callService, rafSpy } = makePreviewCard(
       {
@@ -636,7 +635,7 @@ describe('preview restore state', () => {
     expect(callService).toHaveBeenCalledTimes(1);
     expect(callService).toHaveBeenCalledWith('light', 'turn_on', {
       entity_id: entityId,
-      brightness: 161,
+      brightness: 128,
     });
 
     rafSpy.mockRestore();

@@ -37,6 +37,8 @@ export function curvesToWsPayload(
 /**
  * Convert the backend WebSocket response into frontend LightCurve[].
  * Parses string keys/values to numbers and adds the default 0->0 endpoint.
+ * An explicit non-zero 0 key is preserved as the dim-floor control; interpolation
+ * keeps exact 0% off and applies that floor immediately above 0%.
  */
 export function wsPayloadToCurves(
   entities: Record<string, { brightness: Record<string, string> }>,

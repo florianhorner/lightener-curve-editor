@@ -4,7 +4,7 @@
  */
 
 import { ControlPoint } from './types.js';
-import { prepareBrightnessConfig } from './interpolation.js';
+import { prepareBrightnessConfig, sampleInterpolatedCurve } from './interpolation.js';
 
 // Graph coordinate system: SVG viewBox with padding for axis labels.
 export const PAD_LEFT = 44;
@@ -140,8 +140,10 @@ export function sampleSmoothCurveAt(points: { x: number; y: number }[], targetX:
 }
 
 export function sampleCurveAt(controlPoints: ControlPoint[], position: number): number {
-  // Keep scrubber dots, legend values, and live preview on the same smooth curve
-  // that curve-graph renders.
+  return Math.max(0, Math.min(100, sampleInterpolatedCurve(controlPoints, position)));
+}
+
+export function sampleRenderedCurveAt(controlPoints: ControlPoint[], position: number): number {
   const prepared = prepareBrightnessConfig(controlPoints);
   const pathPoints = prepared.map((cp) => ({ x: cp.lightener, y: cp.target }));
   return Math.max(0, Math.min(100, sampleSmoothCurveAt(pathPoints, position)));

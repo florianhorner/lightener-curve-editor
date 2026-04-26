@@ -309,6 +309,7 @@ export class LightenerCurveCard extends LitElement {
   private _cancelAnimFrame: number | null = null;
   @state() private _previewActive = false;
   @state() private _showPresets = false;
+  @state() private _legendCloseAddSignal = 0;
   private _previewRafPending = false;
   private _previewTrailingTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastPreviewTime = 0;
@@ -898,7 +899,16 @@ export class LightenerCurveCard extends LitElement {
 
   private _togglePresets(): void {
     if (this._managingLights) return;
-    this._showPresets = !this._showPresets;
+    if (this._curves.length === 0) return;
+    const opening = !this._showPresets;
+    this._showPresets = opening;
+    if (opening) {
+      this._legendCloseAddSignal++;
+    }
+  }
+
+  private _onLegendAddPanelOpen(): void {
+    this._showPresets = false;
   }
 
   private _applyPreset(preset: PresetDef): void {
@@ -1546,7 +1556,7 @@ export class LightenerCurveCard extends LitElement {
             <path d="M2 20 C6 20, 8 4, 12 4 S18 20, 22 20" />
           </svg>
           <h2>${(this._config.title as string) ?? 'Brightness Curves'}</h2>
-          ${!this._loading && this._isAdmin
+          ${!this._loading && this._isAdmin && this._curves.length > 0
             ? html`<button
                 class="presets-btn ${this._showPresets ? 'active' : ''}"
                 @click=${this._togglePresets}
@@ -1577,17 +1587,20 @@ export class LightenerCurveCard extends LitElement {
                     @focus-curve=${this._onFocusCurve}
                   ></curve-graph>
                 </div>`}
-
-            <curve-scrubber
-              .curves=${this._curves}
-              .readOnly=${!this._isAdmin || this._managingLights}
-              @scrubber-move=${this._onScrubberMove}
-              @scrubber-start=${this._onScrubberStart}
-              @scrubber-end=${this._onScrubberEnd}
-              @badge-click=${this._onBadgeClick}
-            ></curve-scrubber>
-
-            ${this._isAdmin && !this._cancelAnimating && !this._managingLights
+            ${this._curves.length > 0
+              ? html`<curve-scrubber
+                  .curves=${this._curves}
+                  .readOnly=${!this._isAdmin || this._managingLights}
+                  @scrubber-move=${this._onScrubberMove}
+                  @scrubber-start=${this._onScrubberStart}
+                  @scrubber-end=${this._onScrubberEnd}
+                  @badge-click=${this._onBadgeClick}
+                ></curve-scrubber>`
+              : nothing}
+            ${this._isAdmin &&
+            this._curves.length > 0 &&
+            !this._cancelAnimating &&
+            !this._managingLights
               ? html`
                   <div class="preview-toggle-row">
                     ${this._previewActive
@@ -1612,9 +1625,11 @@ export class LightenerCurveCard extends LitElement {
               .canManage=${this._canManageLights}
               .managing=${this._managingLights}
               .excludeEntityIds=${this._entityId ? [this._entityId] : []}
+              .closeAddSignal=${this._legendCloseAddSignal}
               .hass=${this._hass}
               @select-curve=${this._onSelectCurve}
               @toggle-curve=${this._onToggleCurve}
+              @add-panel-open=${this._onLegendAddPanelOpen}
               @add-light=${this._onAddLight}
               @remove-light=${this._onRemoveLight}
             ></curve-legend>

@@ -15,7 +15,7 @@ import {
   fromSvgX,
   fromSvgY,
   clamp,
-  sampleCurveAt,
+  sampleRenderedCurveAt,
   buildSmoothPath,
   DASH_PATTERNS,
 } from '../utils/graph-math.js';
@@ -645,7 +645,7 @@ export class CurveGraph extends LitElement {
     const dots = this.curves
       .filter((c) => c.visible)
       .map((c) => {
-        const cy = toSvgY(sampleCurveAt(c.controlPoints, pos));
+        const cy = toSvgY(sampleRenderedCurveAt(c.controlPoints, pos));
 
         return svg`
           <circle
@@ -889,6 +889,11 @@ export class CurveGraph extends LitElement {
         ${this._renderScrubberIndicator()}
         ${(() => {
           if (this.readOnly) return nothing;
+          if (this.curves.length === 0) {
+            return svg`<text class="hint hint-select" text-anchor="middle"
+                x="${PAD_LEFT + GRAPH_W / 2}" y="${PAD_TOP + GRAPH_H / 2}"
+                >Add a light below to get started</text>`;
+          }
           if (this.selectedCurveId === null && this._dragCurveIdx < 0) {
             return svg`<text class="hint hint-select" text-anchor="middle"
                 x="${PAD_LEFT + GRAPH_W / 2}" y="${PAD_TOP + GRAPH_H / 2}"
