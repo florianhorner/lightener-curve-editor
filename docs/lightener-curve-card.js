@@ -161,6 +161,9 @@ function e(e,t,i,r){var s,n=arguments.length,o=n<3?t:null===r?r=Object.getOwnPro
         ${(()=>{const e=this.selectedCurveId?this.curves.findIndex(e=>e.entityId===this.selectedCurveId):-1,t=e>=0?[...this.curves.slice(0,e).map((e,t)=>({curve:e,idx:t})),...this.curves.slice(e+1).map((t,i)=>({curve:t,idx:e+1+i})),{curve:this.curves[e],idx:e}]:this.curves.map((e,t)=>({curve:e,idx:t}));return q`<g clip-path="url(#graph-area-${this._uid})">${t.map(({curve:e,idx:t})=>this._renderCurve(e,t))}</g>`})()}
         <!-- Scrubber glow filters (only re-render when curves change, not on every position update) -->
         <defs>
+          <clipPath id="editing-label-clip-${this._uid}">
+            <rect x="${48}" y="${8}" width="${288}" height="24" />
+          </clipPath>
           ${this.curves.filter(e=>e.visible).map(e=>{const t=`scrubber-glow-${e.color.replace("#","")}-${this._uid}`;return q`
               <filter id="${t}" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
@@ -179,6 +182,7 @@ function e(e,t,i,r){var s,n=arguments.length,o=n<3?t:null===r?r=Object.getOwnPro
               <text class="editing-label"
                 x="${50}" y="${26}"
                 fill="${e?.color??"currentColor"}"
+                clip-path="url(#editing-label-clip-${this._uid})"
                 >Editing ${e?.friendlyName??""}</text>
               <text class="hint" text-anchor="end"
                 x="${340}" y="${206}"
@@ -1808,6 +1812,7 @@ function e(e,t,i,r){var s,n=arguments.length,o=n<3?t:null===r?r=Object.getOwnPro
     .presets-btn {
       margin-left: auto;
       padding: 4px 10px;
+      min-height: 44px;
       font-size: 12px;
       font-weight: 500;
       background: transparent;
@@ -1896,6 +1901,7 @@ function e(e,t,i,r){var s,n=arguments.length,o=n<3?t:null===r?r=Object.getOwnPro
       border: 1px solid var(--divider);
       border-radius: 999px;
       padding: 6px 14px;
+      min-height: 44px;
       font-size: 11px;
       font-weight: 500;
       background: transparent;
