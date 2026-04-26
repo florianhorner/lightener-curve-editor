@@ -548,6 +548,7 @@ export class CurveLegend extends LitElement {
     e.stopPropagation();
     if (!this.canManage || this.managing) return;
     if (this.curves.length <= 1) return;
+    this._cancelAdd();
     this._confirmingRemove = entityId;
   }
 
@@ -653,6 +654,7 @@ export class CurveLegend extends LitElement {
   }
 
   private _startAdd() {
+    this._confirmingRemove = null;
     this._addingLight = true;
     this._pendingAddEntity = '';
     this._pendingPreset = this.presetOptions[0]?.value ?? 'linear';
@@ -788,7 +790,7 @@ export class CurveLegend extends LitElement {
                 ${confirming
                   ? this._renderConfirmRow(curve)
                   : html`
-                      <span class="name">${curve.friendlyName}</span>
+                      <span class="name" title=${curve.friendlyName}>${curve.friendlyName}</span>
                       ${this.scrubberPosition !== null
                         ? html`<span class="brightness-value"
                             >${Math.round(

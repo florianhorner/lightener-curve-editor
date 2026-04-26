@@ -204,6 +204,47 @@ describe('curve-graph render order', () => {
   });
 });
 
+describe('curve-graph interaction hint', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('uses compact centered mobile hint text', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = () =>
+      ({
+        matches: true,
+        addEventListener() {},
+        removeEventListener() {},
+      }) as unknown as MediaQueryList;
+
+    try {
+      const graph = document.createElement('curve-graph') as CurveGraph;
+      graph.curves = [
+        {
+          entityId: 'light.alpha',
+          friendlyName: 'Alpha',
+          controlPoints: [
+            { lightener: 0, target: 0 },
+            { lightener: 100, target: 100 },
+          ],
+          visible: true,
+          color: '#2563eb',
+        },
+      ];
+      graph.selectedCurveId = 'light.alpha';
+      document.body.appendChild(graph);
+      await graph.updateComplete;
+
+      const hint = graph.shadowRoot!.querySelector<SVGTextElement>('.hint:not(.hint-select)')!;
+      expect(hint.textContent).toBe('Double-tap add · Hold remove');
+      expect(hint.getAttribute('text-anchor')).toBe('middle');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+});
+
 describe('curve-graph line rendering', () => {
   beforeEach(() => {
     document.body.replaceChildren();

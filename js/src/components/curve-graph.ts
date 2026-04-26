@@ -900,15 +900,18 @@ export class CurveGraph extends LitElement {
                 >Select a light to edit its curve</text>`;
           }
           const selected = this.curves.find((c) => c.entityId === this.selectedCurveId);
+          const interactionHint = this._isMobile
+            ? 'Double-tap add · Hold remove'
+            : 'Double-click to add · Right-click to remove';
           return svg`
               <text class="editing-label"
                 x="${PAD_LEFT + 6}" y="${PAD_TOP + 14}"
                 fill="${selected?.color ?? 'currentColor'}"
                 clip-path="url(#editing-label-clip-${this._uid})"
                 >Editing ${selected?.friendlyName ?? ''}</text>
-              <text class="hint" text-anchor="end"
-                x="${PAD_LEFT + GRAPH_W - 4}" y="${PAD_TOP + GRAPH_H - 6}"
-                >${this._isMobile ? 'Double-tap to add · Long-press to remove' : 'Double-click to add · Right-click to remove'}</text>`;
+              <text class="hint" text-anchor="middle"
+                x="${PAD_LEFT + GRAPH_W / 2}" y="${PAD_TOP + GRAPH_H - 6}"
+                >${interactionHint}</text>`;
         })()}
       </svg>
     `;

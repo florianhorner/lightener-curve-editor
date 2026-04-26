@@ -287,6 +287,23 @@ describe('curve-legend', () => {
     expect(item.textContent).toContain('Alpha');
   });
 
+  it('exposes the full light name as a title when row text is truncated', async () => {
+    const curve: LightCurve = {
+      entityId: 'light.long',
+      friendlyName: 'Ground Floor Living Room Main Ceiling Chandelier (Warm White)',
+      controlPoints: [
+        { lightener: 0, target: 0 },
+        { lightener: 100, target: 100 },
+      ],
+      visible: true,
+      color: '#2563eb',
+    };
+    const el = makeLegend({ curves: [curve] });
+    await el.updateComplete;
+    const name = el.renderRoot.querySelector<HTMLElement>('.name')!;
+    expect(name.title).toBe(curve.friendlyName);
+  });
+
   describe('light management', () => {
     it('does not render add/remove controls when canManage is false', async () => {
       const el = makeLegend();
@@ -411,6 +428,36 @@ describe('curve-legend', () => {
       expect(spy).toHaveBeenCalledTimes(1);
       expect(el.renderRoot.querySelector('ha-entity-picker')).not.toBeNull();
       expect(el.renderRoot.querySelector('.preset-field select')).not.toBeNull();
+    });
+
+    it('opening add light clears a pending remove confirmation', async () => {
+      const el = makeLegend();
+      el.canManage = true;
+      await el.updateComplete;
+
+      el.renderRoot.querySelector<HTMLButtonElement>('.remove-icon')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.confirm-row')).not.toBeNull();
+
+      el.renderRoot.querySelector<HTMLButtonElement>('.add-light-btn')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.confirm-row')).toBeNull();
+      expect(el.renderRoot.querySelector('.add-form')).not.toBeNull();
+    });
+
+    it('opening remove confirmation closes the add light form', async () => {
+      const el = makeLegend();
+      el.canManage = true;
+      await el.updateComplete;
+
+      el.renderRoot.querySelector<HTMLButtonElement>('.add-light-btn')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.add-form')).not.toBeNull();
+
+      el.renderRoot.querySelector<HTMLButtonElement>('.remove-icon')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.add-form')).toBeNull();
+      expect(el.renderRoot.querySelector('.confirm-row')).not.toBeNull();
     });
 
     it('closes the add form when closeAddSignal changes', async () => {
