@@ -229,9 +229,7 @@ export class CurveLegend extends LitElement {
     .confirm-text {
       flex: 1;
       min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      word-break: break-word;
       font-size: 12px;
       color: var(--error-color, #db4437);
       font-weight: 500;
