@@ -88,6 +88,7 @@ async def test_async_setup_panel_urls_degrade_gracefully_without_manifest(
     ):
         assert await async_setup(hass, {}) is True
 
+    hass.http.async_register_static_paths.assert_awaited_once()
     assert "Could not read manifest.json" in caplog.text
 
     panel_custom = register_panel.call_args.kwargs["config"]["_panel_custom"]
