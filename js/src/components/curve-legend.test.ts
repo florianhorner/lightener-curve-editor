@@ -2,6 +2,7 @@
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { CurveLegend } from './curve-legend.js';
+import { CurveLegend as CurveLegendClass } from './curve-legend.js';
 import type { LightCurve } from '../utils/types.js';
 import { LEGEND_SHAPES, sampleCurveAt } from '../utils/graph-math.js';
 
@@ -103,6 +104,14 @@ describe('curve-legend', () => {
     expect(selected.querySelector('.clear-edit-icon')?.getAttribute('aria-label')).toBe(
       'Stop editing Alpha'
     );
+  });
+
+  it('uses non-overlapping mobile action button hitboxes', () => {
+    const cssText = CurveLegendClass.styles.cssText;
+    expect(cssText).toContain('@media (max-width: 500px)');
+    expect(cssText).toContain('.clear-edit-icon');
+    expect(cssText).toContain('min-width: 32px;');
+    expect(cssText).not.toContain('margin: -12px;');
   });
 
   it('sets aria-selected matching selectedCurveId', async () => {

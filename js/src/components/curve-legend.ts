@@ -468,8 +468,9 @@ export class CurveLegend extends LitElement {
       .eye-icon {
         width: 20px;
         height: 20px;
-        padding: 12px;
-        margin: -12px;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 6px;
         margin-left: auto;
         box-sizing: content-box;
       }
@@ -477,8 +478,9 @@ export class CurveLegend extends LitElement {
         opacity: 0.6;
         width: 20px;
         height: 20px;
-        padding: 12px;
-        margin: -12px;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 6px;
         box-sizing: content-box;
       }
       .remove-icon svg {
@@ -491,8 +493,9 @@ export class CurveLegend extends LitElement {
       .clear-edit-icon {
         width: 20px;
         height: 20px;
-        padding: 12px;
-        margin: -12px;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 6px;
         box-sizing: content-box;
       }
       .clear-edit-icon svg {
