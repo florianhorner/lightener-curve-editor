@@ -488,15 +488,6 @@ export class LightenerCurveCard extends LitElement {
       font-size: var(--text-sm);
       color: var(--secondary-text);
     }
-    @keyframes pulse {
-      0%,
-      100% {
-        opacity: 0.5;
-      }
-      50% {
-        opacity: 1;
-      }
-    }
     @keyframes fade-in {
       from {
         opacity: 0;
@@ -707,6 +698,15 @@ export class LightenerCurveCard extends LitElement {
       50% {
         opacity: 0.5;
         transform: scale(0.8);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .loading-graph {
+        animation: none;
+      }
+      .preview-live-dot {
+        animation: none;
+        opacity: 0.6;
       }
     }
   `;
