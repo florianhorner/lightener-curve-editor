@@ -32,6 +32,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - After a HACS upgrade the browser no longer serves the old card from the ES
   module cache. The panel JS URL now carries `?v=<version>` so the browser
   fetches a fresh copy on every upgrade.
+- If a stale card class was already registered in the browser's custom element
+  registry before the fresh module loaded, the panel now detects the version
+  mismatch and reloads the page once (gated via `sessionStorage`) to flush the
+  old class and let the new bundle take over.
 - Remove-confirmation card now wraps long light names instead of truncating them
   on narrow cards.
 - Touch targets for Add/Cancel, remove, and edit-clear icons are now 44 px

@@ -192,6 +192,18 @@ describe('curve-legend', () => {
     expect(spy.mock.calls[0]![0].detail).toEqual({ entityId: 'light.a' });
   });
 
+  it('does not also toggle the row when stop-editing is keyboard activated', async () => {
+    const el = makeLegend({ selectedCurveId: 'light.a' });
+    await el.updateComplete;
+    const spy = vi.fn();
+    el.addEventListener('select-curve', spy);
+    const clear = el.renderRoot.querySelector<HTMLButtonElement>('.clear-edit-icon')!;
+    clear.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    clear.click();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![0].detail).toEqual({ entityId: 'light.a' });
+  });
+
   it('dispatches select-curve on item Enter key', async () => {
     const el = makeLegend();
     await el.updateComplete;

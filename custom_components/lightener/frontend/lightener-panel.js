@@ -1,4 +1,6 @@
 const CARD_VERSION = "2.15.0";
+const CARD_VERSION_GLOBAL = "__LIGHTENER_CURVE_CARD_VERSION__";
+const CARD_STALE_RELOAD_KEY = "lightener_curve_card_reload_version";
 
 class LightenerEditorPanel extends HTMLElement {
   constructor() {
@@ -126,16 +128,42 @@ class LightenerEditorPanel extends HTMLElement {
   }
 
   async _ensureCardScriptLoaded() {
-    if (customElements.get("lightener-curve-card")) {
+    const loadedVersion = window[CARD_VERSION_GLOBAL];
+    const cardAlreadyRegistered = customElements.get("lightener-curve-card");
+    if (cardAlreadyRegistered) {
+      if (!CARD_VERSION || loadedVersion === CARD_VERSION) {
+        return;
+      }
+      this._reloadForStaleCard();
       return;
     }
     if (!this._cardScriptPromise) {
       const moduleUrl = CARD_VERSION
         ? `/lightener/lightener-curve-card.js?v=${CARD_VERSION}`
         : "/lightener/lightener-curve-card.js";
-      this._cardScriptPromise = import(/* @vite-ignore */ moduleUrl);
+      this._cardScriptPromise = import(/* @vite-ignore */ moduleUrl).then((module) => {
+        if (CARD_VERSION) {
+          window[CARD_VERSION_GLOBAL] = CARD_VERSION;
+        }
+        return module;
+      });
     }
     await this._cardScriptPromise;
+  }
+
+  _reloadForStaleCard() {
+    if (!CARD_VERSION) {
+      return;
+    }
+    try {
+      if (window.sessionStorage.getItem(CARD_STALE_RELOAD_KEY) === CARD_VERSION) {
+        return;
+      }
+      window.sessionStorage.setItem(CARD_STALE_RELOAD_KEY, CARD_VERSION);
+    } catch {
+      // Reload anyway; sessionStorage can be unavailable in restricted browser modes.
+    }
+    window.location.reload();
   }
 
   _detachCardListeners() {
