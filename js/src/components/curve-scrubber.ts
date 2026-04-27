@@ -216,14 +216,19 @@ export class CurveScrubber extends LitElement {
 
   /**
    * Return a contrast-safe text color for badge values.
-   * Yellow (#ffca28) and orange (#ffa726) fail WCAG AA on light backgrounds,
-   * so we darken them to meet 4.5:1 ratio.
+   * Yellow (#ffca28) and orange (#ffa726) are low-contrast colors that need
+   * adjustment depending on the background luminance:
+   *  - Light backgrounds: darken to meet WCAG AA 4.5:1 ratio
+   *  - Dark backgrounds: use a lighter, more saturated variant for visibility
    */
   private _badgeTextColor(hex: string): string {
     const low = hex.toLowerCase();
-    // Low-contrast colors on white/light backgrounds — use darkened variants
-    if (low === '#ffca28') return '#9e7c00'; // dark gold
-    if (low === '#ffa726') return '#b36b00'; // dark orange
+    const isDark =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (low === '#ffca28') return isDark ? '#ffd740' : '#9e7c00'; // light gold / dark gold
+    if (low === '#ffa726') return isDark ? '#ffb74d' : '#b36b00'; // light orange / dark orange
     return hex;
   }
 
