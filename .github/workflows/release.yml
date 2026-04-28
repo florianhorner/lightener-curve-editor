@@ -89,7 +89,7 @@ jobs:
              "${{ github.workspace }}/docs/lightener-curve-card.js"
 
       - name: "Deploy demo to GitHub Pages"
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d231e62369c1b5dc4 # v4.0.0
+        uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./docs
