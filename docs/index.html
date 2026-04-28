@@ -188,7 +188,7 @@
       }
 
       .label {
-        color: #666;
+        color: #888;
         font-size: 11px;
         font-weight: 500;
         margin-bottom: 8px;
@@ -277,6 +277,12 @@
         fill: currentColor;
       }
 
+      .touch-hints { display: none; }
+      @media (pointer: coarse) {
+        .pointer-hints { display: none; }
+        .touch-hints { display: flex; }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         *,
         *::before,
@@ -315,11 +321,17 @@
           <a href="https://www.home-assistant.io/">Home Assistant</a>.
           Map group brightness to individual light levels with draggable control points.
         </p>
-        <div class="demo-hints">
+        <div class="demo-hints pointer-hints">
           <span class="hint-pill">Click a light to edit</span>
           <span class="hint-pill">Drag points to shape the curve</span>
           <span class="hint-pill">Double-click to add</span>
           <span class="hint-pill">Right-click to remove</span>
+        </div>
+        <div class="demo-hints touch-hints">
+          <span class="hint-pill">Tap a light to edit</span>
+          <span class="hint-pill">Drag points to shape the curve</span>
+          <span class="hint-pill">Double-tap to add</span>
+          <span class="hint-pill">Hold to remove</span>
         </div>
       </header>
 
