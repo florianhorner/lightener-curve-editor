@@ -662,45 +662,86 @@ export class CurveGraph extends LitElement {
     return svg`${dimOverlay}${line}${dots}`;
   }
 
-  private _renderCurve(curve: LightCurve, curveIdx: number) {
+  private _orderedCurves(): Array<{ curve: LightCurve; idx: number }> {
+    const selectedIdx = this.selectedCurveId
+      ? this.curves.findIndex((c) => c.entityId === this.selectedCurveId)
+      : -1;
+    return selectedIdx >= 0
+      ? [
+          ...this.curves.slice(0, selectedIdx).map((c, i) => ({ curve: c, idx: i })),
+          ...this.curves
+            .slice(selectedIdx + 1)
+            .map((c, i) => ({ curve: c, idx: selectedIdx + 1 + i })),
+          { curve: this.curves[selectedIdx], idx: selectedIdx },
+        ]
+      : this.curves.map((c, i) => ({ curve: c, idx: i }));
+  }
+
+  private _renderCurvePaths(curve: LightCurve, curveIdx: number) {
     if (!curve.visible || !curve.controlPoints.length) return nothing;
 
     try {
       const isSelected = this.selectedCurveId === null || curve.entityId === this.selectedCurveId;
-      const isInteractive = this._isCurveInteractive(curveIdx);
-      const showPoints = isInteractive && !this.readOnly;
+      const isDraggingThisCurve = this._dragCurveIdx === curveIdx;
+      const lineOpacity = isSelected ? 1 : 0.2;
 
-      // Build smooth bezier path through the prepared control points.
       const prepared = prepareBrightnessConfig(curve.controlPoints);
       const pathPoints = prepared.map((cp) => ({
         x: toSvgX(cp.lightener),
         y: toSvgY(cp.target),
       }));
       const curvePath = buildSmoothPath(pathPoints);
-
-      // Gradient fill path: close the curve to the x-axis
       const fillPath =
         curvePath +
         ` L${toSvgX(prepared[prepared.length - 1].lightener)},${toSvgY(0)}` +
         ` L${toSvgX(0)},${toSvgY(0)} Z`;
 
       const gradientId = `grad-${curveIdx}-${this._uid}`;
-
-      // Dash patterns for colorblind accessibility (cycle through 5 patterns)
       const dashArray = DASH_PATTERNS[curveIdx % DASH_PATTERNS.length];
 
-      const isDraggingThisCurve = this._dragCurveIdx === curveIdx;
-      const fillColor = curve.color + '33'; // 20% opacity version
-      const lineOpacity = isSelected ? 1 : 0.2;
+      return svg`
+        <defs>
+          <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.45 : 0.06}" />
+            <stop offset="100%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.08 : 0}" />
+          </linearGradient>
+        </defs>
+        ${isDraggingThisCurve ? this._renderCrossHair(curve) : nothing}
+        <path
+          d="${fillPath}"
+          fill="url(#${gradientId})"
+          style="opacity: ${lineOpacity}"
+          pointer-events="none"
+        />
+        <path
+          class="curve-line"
+          d="${curvePath}"
+          stroke="${curve.color}"
+          stroke-dasharray="${dashArray}"
+          style="opacity: ${lineOpacity}"
+          pointer-events="none"
+        />
+      `;
+    } catch {
+      return nothing;
+    }
+  }
 
-      // Find hovered or dragged point for tooltip
+  private _renderCurvePoints(curve: LightCurve, curveIdx: number) {
+    if (!curve.visible || !curve.controlPoints.length) return nothing;
+
+    try {
+      const isInteractive = this._isCurveInteractive(curveIdx);
+      const showPoints = isInteractive && !this.readOnly;
+      if (!showPoints) return nothing;
+
+      const isDraggingThisCurve = this._dragCurveIdx === curveIdx;
+      const fillColor = curve.color + '33';
+
       let tooltipPoint: ControlPoint | null = null;
       if (isDraggingThisCurve && this._dragPointIdx >= 0) {
         tooltipPoint = curve.controlPoints[this._dragPointIdx];
-      } else if (
-        (this._hoveredPoint?.curve === curveIdx || this._focusedPoint?.curve === curveIdx) &&
-        showPoints
-      ) {
+      } else if (this._hoveredPoint?.curve === curveIdx || this._focusedPoint?.curve === curveIdx) {
         const pointIdx =
           this._focusedPoint?.curve === curveIdx
             ? this._focusedPoint.point
@@ -709,79 +750,54 @@ export class CurveGraph extends LitElement {
       }
 
       return svg`
-      <defs>
-        <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.45 : 0.06}" />
-          <stop offset="100%" stop-color="${curve.color}" stop-opacity="${isSelected ? 0.08 : 0}" />
-        </linearGradient>
-      </defs>
-      ${isDraggingThisCurve ? this._renderCrossHair(curve) : nothing}
-      <path
-        d="${fillPath}"
-        fill="url(#${gradientId})"
-        style="opacity: ${lineOpacity}"
-        pointer-events="none"
-      />
-      <path
-        class="curve-line"
-        d="${curvePath}"
-        stroke="${curve.color}"
-        stroke-dasharray="${dashArray}"
-        style="opacity: ${lineOpacity}"
-        pointer-events="none"
-      />
-      ${
-        showPoints
-          ? curve.controlPoints.map((cp, pi) => {
-              const isOrigin = pi === 0;
-              const isActive = isDraggingThisCurve && this._dragPointIdx === pi;
-              const isHovered =
-                this._hoveredPoint?.curve === curveIdx && this._hoveredPoint?.point === pi;
-              return svg`
-              <circle
-                class="hit-circle ${isOrigin ? 'origin-hit' : ''}"
-                data-curve="${curveIdx}"
-                data-point="${pi}"
-                cx="${toSvgX(cp.lightener)}"
-                cy="${toSvgY(cp.target)}"
-                r="${this._isMobile ? 28 : 22}"
-                fill="transparent"
-                pointer-events="all"
-                tabindex="0"
-                role="button"
-                aria-label="${curve.friendlyName} point ${cp.lightener}% group brightness to ${cp.target}% light brightness. ${pi === 0 ? 'Arrow Up/Down to adjust starting brightness. Cannot be moved horizontally.' : 'Arrow keys move, Enter adds a nearby point, Space removes.'}"
-                style="touch-action: none; -webkit-touch-callout: none"
-                @pointerdown=${(e: PointerEvent) => this._onPointerDown(e, curveIdx, pi)}
-                @contextmenu=${(e: MouseEvent) => this._onPointContextMenu(e, curveIdx, pi)}
-                @pointerenter=${() => (this._hoveredPoint = { curve: curveIdx, point: pi })}
-                @pointerleave=${() => (this._hoveredPoint = null)}
-                @focus=${() => this._onPointFocus(curveIdx, pi)}
-                @blur=${() => this._onPointBlur(curveIdx, pi)}
-                @keydown=${(e: KeyboardEvent) => this._onPointKeyDown(e, curveIdx, pi)}
-              />
-              <circle
-                class="control-point ${isOrigin ? 'origin' : ''} ${
-                  isActive ? 'dragging' : ''
-                } ${isHovered ? 'hovered' : ''} ${
-                  this._focusedPoint?.curve === curveIdx && this._focusedPoint?.point === pi
-                    ? 'focused'
-                    : ''
-                }"
-                cx="${toSvgX(cp.lightener)}"
-                cy="${toSvgY(cp.target)}"
-                r="6"
-                fill="${fillColor}"
-                stroke="${curve.color}"
-                stroke-width="2"
-                style="--glow-color: ${curve.color}"
-                pointer-events="none"
-              />
-            `;
-            })
-          : nothing
-      }
-      ${tooltipPoint !== null ? this._renderTooltip(curve, tooltipPoint) : nothing}
-    `;
+        ${curve.controlPoints.map((cp, pi) => {
+          const isOrigin = pi === 0;
+          const isActive = isDraggingThisCurve && this._dragPointIdx === pi;
+          const isHovered =
+            this._hoveredPoint?.curve === curveIdx && this._hoveredPoint?.point === pi;
+          return svg`
+            <circle
+              class="hit-circle ${isOrigin ? 'origin-hit' : ''}"
+              data-curve="${curveIdx}"
+              data-point="${pi}"
+              cx="${toSvgX(cp.lightener)}"
+              cy="${toSvgY(cp.target)}"
+              r="${this._isMobile ? 28 : 22}"
+              fill="transparent"
+              pointer-events="all"
+              tabindex="0"
+              role="button"
+              aria-label="${curve.friendlyName} point ${cp.lightener}% group brightness to ${cp.target}% light brightness. ${pi === 0 ? 'Arrow Up/Down to adjust starting brightness. Cannot be moved horizontally.' : 'Arrow keys move, Enter adds a nearby point, Space removes.'}"
+              style="touch-action: none; -webkit-touch-callout: none"
+              @pointerdown=${(e: PointerEvent) => this._onPointerDown(e, curveIdx, pi)}
+              @contextmenu=${(e: MouseEvent) => this._onPointContextMenu(e, curveIdx, pi)}
+              @pointerenter=${() => (this._hoveredPoint = { curve: curveIdx, point: pi })}
+              @pointerleave=${() => (this._hoveredPoint = null)}
+              @focus=${() => this._onPointFocus(curveIdx, pi)}
+              @blur=${() => this._onPointBlur(curveIdx, pi)}
+              @keydown=${(e: KeyboardEvent) => this._onPointKeyDown(e, curveIdx, pi)}
+            />
+            <circle
+              class="control-point ${isOrigin ? 'origin' : ''} ${
+                isActive ? 'dragging' : ''
+              } ${isHovered ? 'hovered' : ''} ${
+                this._focusedPoint?.curve === curveIdx && this._focusedPoint?.point === pi
+                  ? 'focused'
+                  : ''
+              }"
+              cx="${toSvgX(cp.lightener)}"
+              cy="${toSvgY(cp.target)}"
+              r="6"
+              fill="${fillColor}"
+              stroke="${curve.color}"
+              stroke-width="2"
+              style="--glow-color: ${curve.color}"
+              pointer-events="none"
+            />
+          `;
+        })}
+        ${tooltipPoint !== null ? this._renderTooltip(curve, tooltipPoint) : nothing}
+      `;
     } catch {
       return nothing;
     }
@@ -848,22 +864,10 @@ export class CurveGraph extends LitElement {
               fill="transparent"
             />`
           : nothing}
+        <!-- Phase 1: curve fills and lines (rendered before scrubber overlay) -->
         ${(() => {
-          // Render the selected curve last so its hit circles are on top of other curves
-          const selectedIdx = this.selectedCurveId
-            ? this.curves.findIndex((c) => c.entityId === this.selectedCurveId)
-            : -1;
-          const order =
-            selectedIdx >= 0
-              ? [
-                  ...this.curves.slice(0, selectedIdx).map((c, i) => ({ curve: c, idx: i })),
-                  ...this.curves
-                    .slice(selectedIdx + 1)
-                    .map((c, i) => ({ curve: c, idx: selectedIdx + 1 + i })),
-                  { curve: this.curves[selectedIdx], idx: selectedIdx },
-                ]
-              : this.curves.map((c, i) => ({ curve: c, idx: i }));
-          return svg`<g clip-path="url(#graph-area-${this._uid})">${order.map(({ curve, idx }) => this._renderCurve(curve, idx))}</g>`;
+          const order = this._orderedCurves();
+          return svg`<g clip-path="url(#graph-area-${this._uid})">${order.map(({ curve, idx }) => this._renderCurvePaths(curve, idx))}</g>`;
         })()}
         <!-- Scrubber glow filters (only re-render when curves change, not on every position update) -->
         <defs>
@@ -887,6 +891,11 @@ export class CurveGraph extends LitElement {
             })}
         </defs>
         ${this._renderScrubberIndicator()}
+        <!-- Phase 3: control points rendered after scrubber overlay so they are always visible -->
+        ${(() => {
+          const order = this._orderedCurves();
+          return svg`<g clip-path="url(#graph-area-${this._uid})">${order.map(({ curve, idx }) => this._renderCurvePoints(curve, idx))}</g>`;
+        })()}
         ${(() => {
           if (this.readOnly) return nothing;
           if (this.curves.length === 0) {
