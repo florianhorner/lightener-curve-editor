@@ -11,6 +11,8 @@ export class CurveFooter extends LitElement {
   static styles = css`
     :host {
       display: block;
+      --accent: var(--primary-color, #2563eb);
+      --divider: var(--divider-color, rgba(127, 127, 127, 0.2));
     }
     .footer {
       display: flex;
@@ -36,7 +38,7 @@ export class CurveFooter extends LitElement {
     .unsaved-label {
       font-size: 11px;
       font-weight: 500;
-      color: var(--warning-color, #f59e0b);
+      color: var(--warning-color, #b45309);
       margin-right: auto;
     }
     button {
@@ -56,16 +58,16 @@ export class CurveFooter extends LitElement {
       cursor: default;
     }
     .btn-save {
-      background: #2563eb;
+      background: var(--accent);
       color: #fff;
     }
     .btn-save:hover:not(:disabled) {
-      background: #1d4fd8;
+      background: color-mix(in srgb, var(--accent) 85%, #000);
     }
     .btn-ghost {
       background: transparent;
       color: var(--secondary-text, #616161);
-      border: 1px solid var(--divider, rgba(127, 127, 127, 0.2));
+      border: 1px solid var(--divider);
     }
     .btn-ghost:hover:not(:disabled) {
       background: rgba(128, 128, 128, 0.08);
@@ -170,7 +172,7 @@ export class CurveFooter extends LitElement {
           ?disabled=${this.saving}
           aria-label="Save changes (Ctrl+S)"
         >
-          ${this.saving ? 'Saving...' : 'Save'}
+          ${this.saving ? 'Saving…' : 'Save'}
         </button>
       </div>
     `;
