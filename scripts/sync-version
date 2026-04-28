@@ -12,6 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 MANIFEST = ROOT / "custom_components/lightener/manifest.json"
 PANEL_JS = ROOT / "custom_components/lightener/frontend/lightener-panel.js"
+CARD_TS = ROOT / "js/src/lightener-curve-card.ts"
+SEMVER_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?(?:\+[A-Za-z0-9.]+)?")
 
 try:
     _manifest = json.loads(MANIFEST.read_text())
@@ -28,40 +30,53 @@ if "version" not in _manifest:
 
 version = _manifest["version"]
 
-if (
-    not isinstance(version, str)
-    or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version) is None
-):
+if not isinstance(version, str) or SEMVER_RE.fullmatch(version) is None:
     print(
         f"[sync-version] ERROR: version {version!r} is not a valid semver string",
         file=sys.stderr,
     )
     sys.exit(1)
 
-content = PANEL_JS.read_text()
-updated, count = re.subn(
-    r'^const CARD_VERSION = ".*";',
-    f'const CARD_VERSION = "{version}";',
-    content,
-    flags=re.MULTILINE,
-)
+updates = [
+    (PANEL_JS, r'^const CARD_VERSION = ".*";'),
+    (CARD_TS, r"^const CARD_VERSION = '.*';"),
+]
+changed = False
 
-if count != 1:
-    print(
-        "[sync-version] ERROR: expected exactly one CARD_VERSION constant in lightener-panel.js"
-        f" (found {count})",
-        file=sys.stderr,
+for path, pattern in updates:
+    content = path.read_text()
+    updated, count = re.subn(
+        pattern,
+        (
+            f'const CARD_VERSION = "{version}";'
+            if path.suffix == ".js"
+            else f"const CARD_VERSION = '{version}';"
+        ),
+        content,
+        flags=re.MULTILINE,
     )
-    sys.exit(1)
 
-if content == updated:
-    print(f"[sync-version] CARD_VERSION already at {version!r}")
-else:
-    tmp = PANEL_JS.with_suffix(".js.tmp")
+    if count != 1:
+        print(
+            f"[sync-version] ERROR: expected exactly one CARD_VERSION constant in {path.name}"
+            f" (found {count})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if content == updated:
+        continue
+
+    changed = True
+    tmp = path.with_suffix(path.suffix + ".tmp")
     try:
         tmp.write_text(updated)
-        tmp.replace(PANEL_JS)
+        tmp.replace(path)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
+
+if changed:
     print(f"[sync-version] CARD_VERSION → {version!r}")
+else:
+    print(f"[sync-version] CARD_VERSION already at {version!r}")
