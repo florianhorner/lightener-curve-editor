@@ -420,15 +420,6 @@ export class LightenerCurveCard extends LitElement {
         opacity: 0;
       }
     }
-    .preview-notice {
-      font-size: var(--text-sm);
-      color: var(--secondary-text-color, #616161);
-      padding: 0;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      opacity: 0.8;
-    }
     .status-icon {
       width: 14px;
       height: 14px;
@@ -648,72 +639,9 @@ export class LightenerCurveCard extends LitElement {
       opacity: 0.65;
       margin-bottom: 2px;
     }
-    .preview-toggle-row {
-      display: flex;
-      align-items: center;
-    }
-    .preview-toggle-btn {
-      border: 1px solid var(--divider);
-      border-radius: 999px;
-      padding: 6px 14px;
-      min-height: 44px;
-      font-size: 11px;
-      font-weight: 500;
-      background: transparent;
-      color: var(--secondary-text);
-      cursor: pointer;
-      font-family: inherit;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition:
-        border-color 0.15s,
-        color 0.15s,
-        background 0.15s;
-    }
-    .preview-toggle-btn:hover {
-      border-color: #2563eb;
-      color: #2563eb;
-      background: rgba(37, 99, 235, 0.04);
-    }
-    .preview-toggle-btn:focus-visible {
-      outline: 2px solid #2563eb;
-      outline-offset: 2px;
-    }
-    .preview-toggle-btn.active {
-      border-color: #2563eb;
-      color: #2563eb;
-      background: rgba(37, 99, 235, 0.06);
-    }
-    .preview-live-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #2563eb;
-      animation: pulse-dot 1.4s ease-in-out infinite;
-      flex-shrink: 0;
-    }
-    .preview-restore-text {
-      opacity: 0.7;
-    }
-    @keyframes pulse-dot {
-      0%,
-      100% {
-        opacity: 1;
-        transform: scale(1);
-      }
-      50% {
-        opacity: 0.5;
-        transform: scale(0.8);
-      }
-    }
     @media (prefers-reduced-motion: reduce) {
       .loading-graph {
         animation: none;
-      }
-      .preview-live-dot {
-        animation: none;
-        opacity: 0.6;
       }
     }
   `;
@@ -1048,19 +976,13 @@ export class LightenerCurveCard extends LitElement {
     // No-op: preview is now controlled by the explicit preview toggle button
   }
 
-  private _onBadgeClick(e: CustomEvent): void {
-    if (!this._hass || !this._isAdmin) return;
-    const { entityId, value } = e.detail as { entityId: string; value: number };
-    if (!this._curves.find((c) => c.entityId === entityId)?.visible) return;
-    const brightness = Math.round((value / 100) * 255);
-    if (brightness === 0) {
-      this._hass.callService('light', 'turn_off', { entity_id: entityId }).catch(() => {});
+  private _onPreviewToggle = (): void => {
+    if (this._previewActive) {
+      this._stopPreview();
     } else {
-      this._hass
-        .callService('light', 'turn_on', { entity_id: entityId, brightness })
-        .catch(() => {});
+      this._startPreview();
     }
-  }
+  };
 
   private _startPreview = (): void => {
     if (!this._hass || this._previewActive) return;
@@ -1553,29 +1475,13 @@ export class LightenerCurveCard extends LitElement {
               ? html`<curve-scrubber
                   .curves=${this._curves}
                   .readOnly=${!this._isAdmin || this._managingLights}
+                  .canPreview=${this._isAdmin && !this._cancelAnimating && !this._managingLights}
+                  .previewActive=${this._previewActive}
                   @scrubber-move=${this._onScrubberMove}
                   @scrubber-start=${this._onScrubberStart}
                   @scrubber-end=${this._onScrubberEnd}
-                  @badge-click=${this._onBadgeClick}
+                  @preview-toggle=${this._onPreviewToggle}
                 ></curve-scrubber>`
-              : nothing}
-            ${this._isAdmin &&
-            this._curves.length > 0 &&
-            !this._cancelAnimating &&
-            !this._managingLights
-              ? html`
-                  <div class="preview-toggle-row">
-                    ${this._previewActive
-                      ? html`<button class="preview-toggle-btn active" @click=${this._stopPreview}>
-                          <span class="preview-live-dot"></span>
-                          Previewing on lights &nbsp;·&nbsp;
-                          <span class="preview-restore-text">Restore</span>
-                        </button>`
-                      : html`<button class="preview-toggle-btn" @click=${this._startPreview}>
-                          Preview on lights
-                        </button>`}
-                  </div>
-                `
               : nothing}
           </div>
 
@@ -1618,11 +1524,6 @@ export class LightenerCurveCard extends LitElement {
         </div>
 
         <div class="status-stack">
-          ${this._previewActive
-            ? html`<div class="preview-notice" role="status" aria-live="polite">
-                Live preview active — click Restore to reset
-              </div>`
-            : nothing}
           ${this._saveSuccess
             ? html`<div class="success" role="status" aria-live="polite">
                 <svg

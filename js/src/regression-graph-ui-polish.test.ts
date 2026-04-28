@@ -207,43 +207,6 @@ describe('sampleCurveAt clamping', () => {
   });
 });
 
-// ── 4. Badge overflow expand/collapse ────────────────────────────────
-
-describe('badge overflow expand/collapse', () => {
-  beforeEach(() => {
-    document.body.replaceChildren();
-  });
-
-  it('_measureBadgeOverflow skips measurement when _expanded is true', async () => {
-    // Create many curves to trigger overflow
-    const manyCurves: LightCurve[] = Array.from({ length: 15 }, (_, i) => ({
-      entityId: `light.test_${i}`,
-      friendlyName: `Test Light ${i}`,
-      controlPoints: [
-        { lightener: 0, target: 0 },
-        { lightener: 100, target: 100 },
-      ],
-      visible: true,
-      color: '#2563eb',
-    }));
-
-    const scrubber = makeScrubber(manyCurves);
-    await scrubber.updateComplete;
-
-    // Access the private _expanded and _overflowCount via bracket notation
-    // Set expanded to true
-    (scrubber as unknown as Record<string, unknown>)['_expanded'] = true;
-    const countBefore = (scrubber as unknown as Record<string, number>)['_overflowCount'];
-
-    // Manually trigger _measureBadgeOverflow
-    (scrubber as unknown as Record<string, () => void>)['_measureBadgeOverflow']();
-
-    // When expanded, measurement should be skipped — overflowCount unchanged
-    const countAfter = (scrubber as unknown as Record<string, number>)['_overflowCount'];
-    expect(countAfter).toBe(countBefore);
-  });
-});
-
 // ── 5. Origin point ARIA label ───────────────────────────────────────
 
 describe('origin point ARIA label', () => {
@@ -788,7 +751,11 @@ describe('preview button hidden during cancel animation', () => {
     document.body.appendChild(card);
     await card.updateComplete;
 
-    const previewRow = card.shadowRoot!.querySelector('.preview-toggle-row');
-    expect(previewRow).not.toBeNull();
+    // Preview is now inside the scrubber component — verify canPreview is passed correctly
+    const scrubber = card.shadowRoot!.querySelector('curve-scrubber') as HTMLElement & {
+      canPreview: boolean;
+    };
+    expect(scrubber).not.toBeNull();
+    expect(scrubber.canPreview).toBe(true);
   });
 });

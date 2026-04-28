@@ -1,60 +1,21 @@
 // @vitest-environment jsdom
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CurveScrubber } from './curve-scrubber.js';
 import type { LightCurve } from '../utils/types.js';
 
-// Minimal ResizeObserver stub that records observed targets and exposes a
-// manual trigger so tests can drive overflow measurement deterministically.
-type RoCallback = (entries: ResizeObserverEntry[]) => void;
-interface RoStub {
-  observe: ReturnType<typeof vi.fn>;
-  unobserve: ReturnType<typeof vi.fn>;
-  disconnect: ReturnType<typeof vi.fn>;
-  trigger: () => void;
-}
-const roInstances: RoStub[] = [];
-
-beforeAll(async () => {
-  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
-    private cb: RoCallback;
-    private targets: Element[] = [];
-    constructor(cb: RoCallback) {
-      this.cb = cb;
-      const stub: RoStub = {
-        observe: vi.fn((t: Element) => {
-          this.targets.push(t);
-        }),
-        unobserve: vi.fn(),
-        disconnect: vi.fn(() => {
-          this.targets = [];
-        }),
-        trigger: () => this.cb([]),
-      };
-      // Proxy the real methods so the ctor's instance is the stub
-      this.observe = stub.observe as unknown as (t: Element) => void;
-      this.disconnect = stub.disconnect as unknown as () => void;
-      roInstances.push(stub);
-    }
-    observe(_t: Element): void {
-      /* replaced per-instance */
-    }
-    unobserve(_t: Element): void {
-      /* noop */
-    }
-    disconnect(): void {
-      /* replaced per-instance */
-    }
-  };
-  await import('./curve-scrubber.js');
-});
+await import('./curve-scrubber.js');
 
 beforeEach(() => {
-  roInstances.length = 0;
   document.body.innerHTML = '';
 });
 
-function makeScrubber(opts?: { curves?: LightCurve[]; readOnly?: boolean }): CurveScrubber {
+function makeScrubber(opts?: {
+  curves?: LightCurve[];
+  readOnly?: boolean;
+  canPreview?: boolean;
+  previewActive?: boolean;
+}): CurveScrubber {
   const el = document.createElement('curve-scrubber') as CurveScrubber;
   el.curves = opts?.curves ?? [
     {
@@ -79,6 +40,8 @@ function makeScrubber(opts?: { curves?: LightCurve[]; readOnly?: boolean }): Cur
     },
   ];
   el.readOnly = opts?.readOnly ?? false;
+  el.canPreview = opts?.canPreview ?? false;
+  el.previewActive = opts?.previewActive ?? false;
   document.body.appendChild(el);
   return el;
 }
@@ -108,110 +71,59 @@ describe('curve-scrubber — render + ARIA', () => {
     const pos = el.renderRoot.querySelector('.position-label');
     expect(pos?.textContent?.trim()).toBe('50%');
   });
+
+  it('does not render any badge elements', async () => {
+    const el = makeScrubber();
+    await el.updateComplete;
+    expect(el.renderRoot.querySelector('.badge')).toBeNull();
+    expect(el.renderRoot.querySelector('.value-badges')).toBeNull();
+  });
 });
 
-describe('curve-scrubber — badges', () => {
-  it('renders one badge per visible curve', async () => {
-    const el = makeScrubber();
+describe('curve-scrubber — preview toggle', () => {
+  it('hides preview button when canPreview=false', async () => {
+    const el = makeScrubber({ canPreview: false });
     await el.updateComplete;
-    const badges = el.renderRoot.querySelectorAll('.badge');
-    expect(badges.length).toBe(2);
+    expect(el.renderRoot.querySelector('.preview-toggle-btn')).toBeNull();
   });
 
-  it('omits badges for invisible curves', async () => {
-    const el = makeScrubber({
-      curves: [
-        {
-          entityId: 'light.a',
-          friendlyName: 'Alpha',
-          controlPoints: [
-            { lightener: 0, target: 0 },
-            { lightener: 100, target: 100 },
-          ],
-          visible: false,
-          color: '#2563eb',
-        },
-        {
-          entityId: 'light.b',
-          friendlyName: 'Beta',
-          controlPoints: [
-            { lightener: 0, target: 0 },
-            { lightener: 100, target: 100 },
-          ],
-          visible: true,
-          color: '#ef5350',
-        },
-      ],
-    });
+  it('shows "Preview on lights" button when canPreview=true and not active', async () => {
+    const el = makeScrubber({ canPreview: true, previewActive: false });
     await el.updateComplete;
-    const badges = el.renderRoot.querySelectorAll('.badge');
-    expect(badges.length).toBe(1);
-    // Badge shows value only, no name (name is shown in the legend instead)
-    expect(badges[0]!.querySelector('.badge-name')).toBeNull();
+    const btn = el.renderRoot.querySelector('.preview-toggle-btn');
+    expect(btn).not.toBeNull();
+    expect(btn?.textContent).toContain('Preview on lights');
+    expect(btn?.classList.contains('active')).toBe(false);
   });
 
-  it('darkens low-contrast #ffca28 to #9e7c00 for badge text', async () => {
-    const el = makeScrubber();
-    el.style.setProperty('--ha-card-background', '#ffffff');
+  it('shows active state with live dot when previewActive=true', async () => {
+    const el = makeScrubber({ canPreview: true, previewActive: true });
     await el.updateComplete;
-    const badges = el.renderRoot.querySelectorAll<HTMLElement>('.badge');
-    const valueSpan = badges[1]!.querySelector<HTMLElement>('span[style*="color"]')!;
-    expect(valueSpan.style.color).toContain('rgb(158, 124, 0)');
+    const btn = el.renderRoot.querySelector('.preview-toggle-btn');
+    expect(btn?.classList.contains('active')).toBe(true);
+    expect(el.renderRoot.querySelector('.preview-live-dot')).not.toBeNull();
+    expect(btn?.textContent).toContain('Previewing');
+    expect(btn?.textContent).toContain('Restore');
   });
 
-  it('darkens low-contrast #ffa726 to #b36b00 for badge text', async () => {
-    const el = makeScrubber({
-      curves: [
-        {
-          entityId: 'light.x',
-          friendlyName: 'X',
-          controlPoints: [
-            { lightener: 0, target: 0 },
-            { lightener: 100, target: 100 },
-          ],
-          visible: true,
-          color: '#ffa726',
-        },
-      ],
-    });
-    el.style.setProperty('--ha-card-background', '#ffffff');
+  it('dispatches preview-toggle event when button clicked (inactive state)', async () => {
+    const el = makeScrubber({ canPreview: true, previewActive: false });
     await el.updateComplete;
-    const valueSpan = el.renderRoot.querySelector<HTMLElement>('.badge span[style*="color"]')!;
-    expect(valueSpan.style.color).toContain('rgb(179, 107, 0)');
+    const spy = vi.fn();
+    el.addEventListener('preview-toggle', spy);
+    const btn = el.renderRoot.querySelector<HTMLButtonElement>('.preview-toggle-btn')!;
+    btn.click();
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the dark-surface variant when the rendered HA panel background is dark', async () => {
-    const el = makeScrubber();
-    el.style.setProperty('--ha-card-background', '#1c1c1c');
+  it('dispatches preview-toggle event when Restore clicked (active state)', async () => {
+    const el = makeScrubber({ canPreview: true, previewActive: true });
     await el.updateComplete;
-    const badges = el.renderRoot.querySelectorAll<HTMLElement>('.badge');
-    const valueSpan = badges[1]!.querySelector<HTMLElement>('span[style*="color"]')!;
-    expect(valueSpan.style.color).toContain('rgb(255, 215, 64)');
-  });
-
-  it('renders the backend-linear badge value for a peak curve', async () => {
-    const el = makeScrubber({
-      curves: [
-        {
-          entityId: 'light.peak',
-          friendlyName: 'Peak',
-          controlPoints: [
-            { lightener: 0, target: 0 },
-            { lightener: 50, target: 100 },
-            { lightener: 100, target: 0 },
-          ],
-          visible: true,
-          color: '#2563eb',
-        },
-      ],
-    });
-    await el.updateComplete;
-
-    (el as unknown as Record<string, number>)['_position'] = 25;
-    await el.updateComplete;
-
-    const badge = el.renderRoot.querySelector<HTMLElement>('.badge')!;
-    expect(badge.textContent).toContain('50%');
+    const spy = vi.fn();
+    el.addEventListener('preview-toggle', spy);
+    const btn = el.renderRoot.querySelector<HTMLButtonElement>('.preview-toggle-btn')!;
+    btn.click();
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -332,33 +244,6 @@ describe('curve-scrubber — readOnly guard', () => {
     expect(track.getAttribute('tabindex')).toBe('-1');
     expect(track.getAttribute('aria-disabled')).toBe('true');
   });
-
-  it('strips interactive attributes from badges when readOnly=true', async () => {
-    const el = makeScrubber({ readOnly: true });
-    await el.updateComplete;
-    const badges = [...el.renderRoot.querySelectorAll('[data-value-badge="true"]')];
-    expect(badges.length).toBeGreaterThan(0);
-    badges.forEach((b) => {
-      expect(b.tagName).toBe('DIV');
-      expect(b.getAttribute('tabindex')).toBeNull();
-      expect(b.getAttribute('role')).toBeNull();
-      expect(b.getAttribute('aria-label')).toBeNull();
-      expect(b.classList.contains('interactive')).toBe(false);
-    });
-  });
-
-  it('renders badges as interactive <button>s when not readOnly', async () => {
-    const el = makeScrubber({ readOnly: false });
-    await el.updateComplete;
-    const badges = [...el.renderRoot.querySelectorAll('[data-value-badge="true"]')];
-    expect(badges.length).toBeGreaterThan(0);
-    badges.forEach((b) => {
-      expect(b.tagName).toBe('BUTTON');
-      expect(b.getAttribute('type')).toBe('button');
-      expect(b.classList.contains('interactive')).toBe(true);
-      expect(b.getAttribute('aria-label')).toMatch(/^Set .* to \d+%$/);
-    });
-  });
 });
 
 describe('curve-scrubber — pointer drag', () => {
@@ -372,7 +257,6 @@ describe('curve-scrubber — pointer drag', () => {
 
     const thumb = el.renderRoot.querySelector('.thumb')! as HTMLElement;
     const track = el.renderRoot.querySelector('.track-area')! as HTMLElement;
-    // Stub getBoundingClientRect for deterministic track geometry
     vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
       left: 0,
       top: 0,
@@ -384,7 +268,6 @@ describe('curve-scrubber — pointer drag', () => {
       y: 0,
       toJSON: () => ({}),
     } as DOMRect);
-    // jsdom lacks setPointerCapture on Element
     (thumb as unknown as { setPointerCapture: (id: number) => void }).setPointerCapture = () => {};
 
     thumb.dispatchEvent(
@@ -454,30 +337,6 @@ describe('curve-scrubber — pointer drag', () => {
   });
 });
 
-describe('curve-scrubber — badge-click event', () => {
-  it('dispatches badge-click with entityId and value when interactive badge is clicked', async () => {
-    const el = makeScrubber({ readOnly: false });
-    await el.updateComplete;
-    const spy = vi.fn();
-    el.addEventListener('badge-click', spy);
-
-    const btn = el.renderRoot.querySelector<HTMLButtonElement>('button.badge.interactive')!;
-    btn.click();
-
-    expect(spy).toHaveBeenCalledTimes(1);
-    const detail = spy.mock.calls[0]![0].detail as { entityId: string; value: number };
-    expect(detail.entityId).toMatch(/^light\./);
-    expect(typeof detail.value).toBe('number');
-  });
-
-  it('does not render interactive badges when readOnly=true', async () => {
-    const el = makeScrubber({ readOnly: true });
-    await el.updateComplete;
-    const btns = el.renderRoot.querySelectorAll('button.badge.interactive');
-    expect(btns.length).toBe(0);
-  });
-});
-
 describe('curve-scrubber — track click', () => {
   it('updates position based on click clientX relative to track rect', async () => {
     const el = makeScrubber();
@@ -500,103 +359,5 @@ describe('curve-scrubber — track click', () => {
     await el.updateComplete;
     expect(moveSpy).toHaveBeenCalledTimes(1);
     expect(moveSpy.mock.calls[0]![0].detail.position).toBe(40);
-  });
-});
-
-describe('curve-scrubber — overflow indicator', () => {
-  it('hides +N more when nothing overflows', async () => {
-    const el = makeScrubber();
-    await el.updateComplete;
-    const overflow = el.renderRoot.querySelector('.overflow-indicator');
-    expect(overflow).toBeNull();
-  });
-
-  it('shows +N more when ResizeObserver measures hidden badges', async () => {
-    const el = makeScrubber();
-    await el.updateComplete;
-    const container = el.renderRoot.querySelector<HTMLElement>('.value-badges')!;
-    const badges = container.querySelectorAll<HTMLElement>('.badge');
-    // Container can only show the first row (0-20); second badge is at 25
-    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 20 });
-    Object.defineProperty(badges[0]!, 'offsetTop', { configurable: true, value: 0 });
-    Object.defineProperty(badges[0]!, 'offsetHeight', { configurable: true, value: 20 });
-    Object.defineProperty(badges[1]!, 'offsetTop', { configurable: true, value: 25 });
-    Object.defineProperty(badges[1]!, 'offsetHeight', { configurable: true, value: 20 });
-
-    // Trigger the measurement via the stub
-    roInstances[0]!.trigger();
-    await el.updateComplete;
-
-    const btn = el.renderRoot.querySelector<HTMLButtonElement>('.overflow-indicator');
-    expect(btn).not.toBeNull();
-    expect(btn!.textContent?.trim()).toBe('+1 more');
-    expect(btn!.getAttribute('aria-expanded')).toBe('false');
-  });
-
-  it('toggles to "Collapse" when clicked', async () => {
-    const el = makeScrubber();
-    await el.updateComplete;
-    const container = el.renderRoot.querySelector<HTMLElement>('.value-badges')!;
-    const badges = container.querySelectorAll<HTMLElement>('.badge');
-    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 20 });
-    Object.defineProperty(badges[0]!, 'offsetTop', { configurable: true, value: 0 });
-    Object.defineProperty(badges[0]!, 'offsetHeight', { configurable: true, value: 20 });
-    Object.defineProperty(badges[1]!, 'offsetTop', { configurable: true, value: 25 });
-    Object.defineProperty(badges[1]!, 'offsetHeight', { configurable: true, value: 20 });
-    roInstances[0]!.trigger();
-    await el.updateComplete;
-
-    const btn = el.renderRoot.querySelector<HTMLButtonElement>('.overflow-indicator')!;
-    btn.click();
-    await el.updateComplete;
-    expect(btn.textContent?.trim()).toBe('Collapse');
-    expect(btn.getAttribute('aria-expanded')).toBe('true');
-  });
-
-  it('counts a straddling badge as hidden after the snap (not undercount)', async () => {
-    // Three badges laid out at tops 0 / 22 / 44, each 20 tall, clipHeight 46.
-    // Third badge's top (44) is within 46 but bottom (64) exceeds. Under the old
-    // logic it was excluded from hiddenCount and then hidden by the snap — so
-    // "+N more" undercounted. New logic: snap to the last fully-visible badge
-    // (second, bottom 42), then count any badge whose bottom exceeds snap.
-    const curve = (name: string, color: string): LightCurve => ({
-      entityId: `light.${name}`,
-      friendlyName: name,
-      controlPoints: [
-        { lightener: 0, target: 0 },
-        { lightener: 100, target: 100 },
-      ],
-      visible: true,
-      color,
-    });
-    const el = makeScrubber({
-      curves: [curve('A', '#2563eb'), curve('B', '#ef5350'), curve('C', '#ffca28')],
-    });
-    await el.updateComplete;
-    const container = el.renderRoot.querySelector<HTMLElement>('.value-badges')!;
-    const badges = container.querySelectorAll<HTMLElement>('.badge');
-    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 46 });
-    badges.forEach((b, i) => {
-      Object.defineProperty(b, 'offsetTop', { configurable: true, value: i * 22 });
-      Object.defineProperty(b, 'offsetHeight', { configurable: true, value: 20 });
-    });
-
-    roInstances[0]!.trigger();
-    await el.updateComplete;
-
-    const btn = el.renderRoot.querySelector<HTMLButtonElement>('.overflow-indicator')!;
-    expect(btn).not.toBeNull();
-    expect(btn!.textContent?.trim()).toBe('+1 more');
-  });
-});
-
-describe('curve-scrubber — lifecycle', () => {
-  it('disconnects ResizeObserver on disconnectedCallback', async () => {
-    const el = makeScrubber();
-    await el.updateComplete;
-    const ro = roInstances[0]!;
-    expect(ro.observe).toHaveBeenCalled();
-    el.remove();
-    expect(ro.disconnect).toHaveBeenCalled();
   });
 });
