@@ -35,9 +35,10 @@ unzip -l lightener.zip | grep -c "custom_components/"  # must be 0
 
 ### CARD_VERSION sync
 
-`const CARD_VERSION` in `custom_components/lightener/frontend/lightener-panel.js` must
-always match `manifest.json` `"version"`. This is how the panel forces a fresh
-card module fetch after a HACS upgrade.
+`const CARD_VERSION` in `custom_components/lightener/frontend/lightener-panel.js` and
+`js/src/lightener-curve-card.ts` must always match `manifest.json` `"version"`.
+This is how the panel forces a fresh card module fetch after a HACS upgrade and
+how the card exposes its version at runtime via `window.LIGHTENER_CARD_VERSION`.
 
 **Never edit `CARD_VERSION` by hand.** Run `scripts/sync-version` instead.
 

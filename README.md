@@ -20,21 +20,22 @@ A visual editor for per-light brightness curves, directly in your HA dashboard �
 
 - **Drag control points** on smooth bezier curves to shape each light's response
 - **Double-click to add** a point, **right-click to remove** one
-- **Brightness scrubber** with gradient track and inline value badges for each light
+- **Brightness scrubber** with gradient track and position label — drag to preview each light's output at any brightness level
 - **Scrubber + graph sync**: moving the scrubber shows a vertical indicator and per-curve dots directly on the graph
 - **Colorblind-accessible**: dash patterns + shape markers (circle, square, diamond, triangle, bar) distinguish curves without relying on color alone
 - **Keyboard navigation**: arrow keys on the scrubber, Enter/Space on legend items, Ctrl+S to save, Ctrl/Cmd+Z to undo, Esc to cancel
 - **Layered panel design**: graph, scrubber, and legend each sit in their own tinted sub-panel
 - **Theme-aware**: adapts to both HA light and dark modes
-- **Scales from 2 to 20+ lights**: badges cap at 2 rows; excess badges collapse behind a "+N more" button, and long names truncate cleanly
+- **Scales from 2 to 20+ lights**: legend rows and curve labels truncate long names cleanly at any card width
 - **Dim floor via origin drag**: drag the leftmost control point vertically to set a non-zero dim floor — a dashed stroke and `ns-resize` cursor indicate the constrained Y-only movement
 - **Mobile-friendly**: touch-optimised controls with 44px touch targets
 - **Mobile long-press delete**: remove a control point by long-pressing it on touch devices
-- **Live light preview**: a **Preview** button in the card header pushes real brightness to all lights while you shape curves; the scrubber also pushes live brightness on drag. Lights restore automatically when preview stops, you navigate away, or the entity changes
+- **Live light preview**: the **Preview** button in the scrubber panel pushes real brightness to all lights while you shape curves; dragging the scrubber also pushes live brightness. Lights restore automatically when preview stops, you navigate away, or the entity changes
 - **Custom card title**: set a title in the card config or keep the default "Brightness Curves"
 - **Visual card editor**: Home Assistant card config UI with native entity picker and optional title field
 - **Admin-only editing**: non-admin users see curves in read-only mode
 - **Curve presets**: one-click presets panel (Linear, Dim accent, Late starter, Night mode) with miniature SVG previews — applies to selected light or all lights at once, fully undoable
+- **Explicit edit mode**: selecting a curve shows an "Editing" chip and a × button to exit edit mode without navigating away
 
 ### WebSocket API
 
