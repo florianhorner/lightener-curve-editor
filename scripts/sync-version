@@ -9,6 +9,16 @@ import re
 import sys
 from pathlib import Path
 
+if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help", "help"):
+    print(
+        "Usage: scripts/sync-version\n\n"
+        "Syncs CARD_VERSION in lightener-panel.js and js/src/lightener-curve-card.ts\n"
+        "to match the version in custom_components/lightener/manifest.json.\n\n"
+        "Run after bumping manifest.json, or let scripts/ha-sync and the release\n"
+        "workflow call it automatically."
+    )
+    sys.exit(0)
+
 ROOT = Path(__file__).parent.parent
 MANIFEST = ROOT / "custom_components/lightener/manifest.json"
 PANEL_JS = ROOT / "custom_components/lightener/frontend/lightener-panel.js"

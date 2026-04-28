@@ -165,6 +165,10 @@ Good bug reports include:
 - What you expected vs. what actually happened
 - Home Assistant version and browser/device info
 
+If the card UI looks like an older version after an upgrade, see
+[TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md) for the diagnostic snippet and
+recovery sequence before filing an issue.
+
 ## Reporting security vulnerabilities
 
 See [SECURITY.md](SECURITY.md).

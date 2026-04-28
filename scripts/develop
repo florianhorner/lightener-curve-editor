@@ -4,6 +4,21 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
+    cat <<'EOF'
+Usage: scripts/develop
+
+Start Home Assistant locally with the integration loaded.
+
+Requires: scripts/setup-python must have been run first.
+
+The HA instance is available at http://localhost:8123.
+Python/backend changes require restarting this script to take effect.
+Frontend-only changes can be applied without restart via scripts/ha-sync.
+EOF
+    exit 0
+fi
+
 if [[ ! -d .venv ]]; then
     echo "Virtualenv not found. Run scripts/setup-python first." >&2
     exit 1

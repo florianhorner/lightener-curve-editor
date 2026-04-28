@@ -55,6 +55,11 @@ pytest() {
 echo "Lightener dev env active — tests: scripts/test-python or bare pytest, HA: scripts/develop"
 EOF
 
+if command -v pre-commit >/dev/null 2>&1; then
+    echo "[setup-python] Installing pre-commit hooks..."
+    pre-commit install --install-hooks
+fi
+
 echo ""
 echo "[setup-python] Backend environment ready"
 echo "  Activate shell:   source .env.workspace"
