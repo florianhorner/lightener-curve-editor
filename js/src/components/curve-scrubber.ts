@@ -18,6 +18,8 @@ export class CurveScrubber extends LitElement {
   static styles = css`
     :host {
       display: block;
+      --accent: var(--primary-color, #2563eb);
+      --divider: var(--divider-color, rgba(127, 127, 127, 0.2));
     }
     .scrubber-panel {
       border-radius: 12px;
@@ -41,7 +43,7 @@ export class CurveScrubber extends LitElement {
       color: var(--secondary-text-color, #616161);
     }
     .preview-toggle-btn {
-      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+      border: 1px solid var(--divider);
       border-radius: 999px;
       padding: 4px 11px;
       font-size: 10px;
@@ -61,24 +63,24 @@ export class CurveScrubber extends LitElement {
       flex-shrink: 0;
     }
     .preview-toggle-btn:hover {
-      border-color: #2563eb;
-      color: #2563eb;
-      background: rgba(37, 99, 235, 0.04);
+      border-color: var(--accent);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 4%, transparent);
     }
     .preview-toggle-btn:focus-visible {
-      outline: 2px solid #2563eb;
+      outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
     .preview-toggle-btn.active {
-      border-color: #2563eb;
-      color: #2563eb;
-      background: rgba(37, 99, 235, 0.06);
+      border-color: var(--accent);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 6%, transparent);
     }
     .preview-live-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #2563eb;
+      background: var(--accent);
       animation: pulse-dot 1.4s ease-in-out infinite;
       flex-shrink: 0;
     }
@@ -119,7 +121,7 @@ export class CurveScrubber extends LitElement {
       right: 0;
       height: 4px;
       border-radius: 2px;
-      background: rgba(37, 99, 235, 0.25);
+      background: color-mix(in srgb, var(--accent) 25%, transparent);
     }
     .track-fill {
       position: absolute;
@@ -127,7 +129,11 @@ export class CurveScrubber extends LitElement {
       left: 0;
       height: 4px;
       border-radius: 2px;
-      background: linear-gradient(90deg, rgba(37, 99, 235, 0.25), #2563eb);
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--accent) 25%, transparent),
+        var(--accent)
+      );
       transition: width 0.05s linear;
     }
     .thumb {
@@ -135,12 +141,12 @@ export class CurveScrubber extends LitElement {
       top: 6px;
       width: 16px;
       height: 16px;
-      background: #2563eb;
+      background: var(--accent);
       border-radius: 50%;
       transform: translateX(-50%);
       cursor: grab;
       border: 2px solid var(--ha-card-background, var(--card-background-color, #fff));
-      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+      box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 30%, transparent);
       transition: box-shadow 0.15s ease;
       z-index: 2;
     }
@@ -153,18 +159,18 @@ export class CurveScrubber extends LitElement {
       bottom: -14px;
     }
     .thumb:hover {
-      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45);
+      box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 45%, transparent);
     }
     .thumb.dragging {
       cursor: grabbing;
-      box-shadow: 0 2px 14px rgba(37, 99, 235, 0.5);
+      box-shadow: 0 2px 14px color-mix(in srgb, var(--accent) 50%, transparent);
     }
     .position-label {
       position: absolute;
       top: -10px;
       font-size: 10px;
       font-weight: 600;
-      color: #2563eb;
+      color: var(--accent);
       transform: translateX(-50%);
       user-select: none;
       font-variant-numeric: tabular-nums;
@@ -193,7 +199,8 @@ export class CurveScrubber extends LitElement {
       }
       .preview-toggle-btn {
         font-size: 11px;
-        padding: 5px 12px;
+        padding: 0 12px;
+        min-height: 44px;
       }
     }
   `;
