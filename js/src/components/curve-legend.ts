@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { LightCurve, Hass } from '../utils/types.js';
+import { EntityPickerLoader } from '../utils/entity-picker-loader.js';
 import { LEGEND_SHAPES, sampleCurveAt } from '../utils/graph-math.js';
 
 export interface LegendPresetOption {
@@ -25,14 +26,17 @@ export class CurveLegend extends LitElement {
   @property({ type: Array }) excludeEntityIds: string[] = [];
   @property({ type: Array }) presetOptions: LegendPresetOption[] = DEFAULT_PRESET_OPTIONS;
   @property({ type: Number }) closeAddSignal = 0;
+  @property({ type: Number }) closeRemoveSignal = 0;
   @property({ attribute: false }) hass: Hass | null = null;
 
   @state() private _addingLight = false;
   @state() private _pendingAddEntity = '';
   @state() private _pendingPreset: string = DEFAULT_PRESET_OPTIONS[0].value;
   @state() private _confirmingRemove: string | null = null;
-  @state() private _pickerReady = false;
-  private _pickerLoadStarted = false;
+  private _picker = new EntityPickerLoader(
+    () => this.isConnected,
+    () => this.requestUpdate()
+  );
 
   static styles = css`
     :host {
@@ -219,6 +223,53 @@ export class CurveLegend extends LitElement {
       min-width: 2.8ch;
       text-align: right;
     }
+    .editing-chip {
+      flex-shrink: 0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--primary-color, #2563eb) 12%, transparent);
+      color: var(--primary-color, #2563eb);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+    .clear-edit-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      padding: 4px;
+      box-sizing: content-box;
+      color: var(--primary-color, #2563eb);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.7;
+      transition:
+        opacity 0.15s ease,
+        background 0.15s ease;
+    }
+    .clear-edit-icon:hover {
+      opacity: 1;
+      background: color-mix(in srgb, var(--primary-color, #2563eb) 10%, transparent);
+      border-radius: 4px;
+    }
+    .clear-edit-icon:focus {
+      outline: none;
+    }
+    .clear-edit-icon:focus-visible {
+      outline: 2px solid var(--primary-color, #2563eb);
+      outline-offset: 2px;
+      border-radius: 4px;
+      opacity: 1;
+    }
+    .clear-edit-icon svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+    }
     .confirm-row {
       display: flex;
       align-items: center;
@@ -229,9 +280,7 @@ export class CurveLegend extends LitElement {
     .confirm-text {
       flex: 1;
       min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      word-break: break-word;
       font-size: 12px;
       color: var(--error-color, #db4437);
       font-weight: 500;
@@ -359,6 +408,7 @@ export class CurveLegend extends LitElement {
     }
     .add-form-actions button {
       padding: 4px 12px;
+      min-height: 44px;
       font-size: 12px;
       font-weight: 500;
       border-radius: 6px;
@@ -422,15 +472,37 @@ export class CurveLegend extends LitElement {
       .eye-icon {
         width: 20px;
         height: 20px;
-        padding: 12px;
-        margin: -12px;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 6px;
         margin-left: auto;
         box-sizing: content-box;
       }
       .remove-icon {
         opacity: 0.6;
+        width: 20px;
+        height: 20px;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 6px;
+        box-sizing: content-box;
       }
       .remove-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+      .editing-chip {
+        display: none;
+      }
+      .clear-edit-icon {
+        width: 20px;
+        height: 20px;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 6px;
+        box-sizing: content-box;
+      }
+      .clear-edit-icon svg {
         width: 18px;
         height: 18px;
       }
@@ -459,6 +531,11 @@ export class CurveLegend extends LitElement {
     );
   }
 
+  private _clearSelection(e: Event, entityId: string) {
+    e.stopPropagation();
+    this._select(entityId);
+  }
+
   protected willUpdate(changed: Map<PropertyKey, unknown>): void {
     super.willUpdate(changed);
     // If management is revoked or a WS call starts, drop any pending confirm so
@@ -472,13 +549,18 @@ export class CurveLegend extends LitElement {
     if (changed.has('closeAddSignal')) {
       this._cancelAdd();
     }
+    if (changed.has('closeRemoveSignal')) {
+      this._confirmingRemove = null;
+    }
   }
 
   private _startRemove(e: Event, entityId: string) {
     e.stopPropagation();
     if (!this.canManage || this.managing) return;
     if (this.curves.length <= 1) return;
+    this._cancelAdd();
     this._confirmingRemove = entityId;
+    this.dispatchEvent(new CustomEvent('remove-panel-open', { bubbles: true, composed: true }));
   }
 
   private _cancelRemove(e: Event) {
@@ -504,6 +586,7 @@ export class CurveLegend extends LitElement {
 
   private _onItemKeyDown(e: KeyboardEvent, entityId: string) {
     if (this._confirmingRemove === entityId) return;
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       this._select(entityId);
@@ -526,56 +609,11 @@ export class CurveLegend extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    this._ensurePickerLoaded();
+    this._picker.ensureLoaded();
   }
 
   protected updated(changed: Map<string, unknown>): void {
-    if (changed.has('hass') && this.hass) this._ensurePickerLoaded();
-  }
-
-  private _ensurePickerLoaded(): void {
-    if (this._pickerLoadStarted) return;
-    this._pickerLoadStarted = true;
-    if (customElements.get('ha-entity-picker')) {
-      this._pickerReady = true;
-      return;
-    }
-    const kickLoaders = async () => {
-      try {
-        const loadHelpers = (window as unknown as { loadCardHelpers?: () => Promise<unknown> })
-          .loadCardHelpers;
-        if (typeof loadHelpers === 'function') await loadHelpers();
-      } catch {
-        /* ignore */
-      }
-      try {
-        const entitiesCard = customElements.get('hui-entities-card') as
-          | (CustomElementConstructor & { getConfigElement?: () => Promise<HTMLElement> })
-          | undefined;
-        await entitiesCard?.getConfigElement?.();
-      } catch {
-        /* ignore */
-      }
-    };
-    kickLoaders();
-    const ready = customElements.whenDefined('ha-entity-picker');
-    const timeout = new Promise<void>((r) => setTimeout(r, 1500));
-    Promise.race([ready, timeout]).then(() => {
-      if (!this.isConnected) return;
-      this._pickerReady = !!customElements.get('ha-entity-picker');
-      if (!this._pickerReady) {
-        console.warn(
-          '[lightener-curve-card] <ha-entity-picker> not available in add-light form — falling back to plain input.'
-        );
-        // Picker may register after the 1500ms window; upgrade when it does.
-        customElements.whenDefined('ha-entity-picker').then(() => {
-          if (!this.isConnected) return;
-          this._pickerReady = true;
-          this.requestUpdate();
-        });
-      }
-      this.requestUpdate();
-    });
+    if (changed.has('hass') && this.hass) this._picker.ensureLoaded();
   }
 
   private _onFallbackAddEntityInput(e: Event): void {
@@ -583,6 +621,7 @@ export class CurveLegend extends LitElement {
   }
 
   private _startAdd() {
+    this._confirmingRemove = null;
     this._addingLight = true;
     this._pendingAddEntity = '';
     this._pendingPreset = this.presetOptions[0]?.value ?? 'linear';
@@ -630,7 +669,7 @@ export class CurveLegend extends LitElement {
     ];
     return html`
       <div class="add-form">
-        ${this._pickerReady
+        ${this._picker.ready
           ? html`<ha-entity-picker
               .hass=${this.hass}
               .value=${this._pendingAddEntity}
@@ -718,13 +757,37 @@ export class CurveLegend extends LitElement {
                 ${confirming
                   ? this._renderConfirmRow(curve)
                   : html`
-                      <span class="name">${curve.friendlyName}</span>
+                      <span class="name" title=${curve.friendlyName}>${curve.friendlyName}</span>
                       ${this.scrubberPosition !== null
                         ? html`<span class="brightness-value"
                             >${Math.round(
                               sampleCurveAt(curve.controlPoints, Math.round(this.scrubberPosition))
                             )}%</span
                           >`
+                        : nothing}
+                      ${this.selectedCurveId === curve.entityId
+                        ? html`
+                            <span class="editing-chip">Editing</span>
+                            <button
+                              type="button"
+                              class="clear-edit-icon"
+                              aria-label="Stop editing ${curve.friendlyName}"
+                              title="Stop editing ${curve.friendlyName}"
+                              @click=${(e: Event) => this._clearSelection(e, curve.entityId)}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                              </svg>
+                            </button>
+                          `
                         : nothing}
                       <svg
                         class="eye-icon"

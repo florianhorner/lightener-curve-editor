@@ -2,6 +2,7 @@
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { CurveLegend } from './curve-legend.js';
+import { CurveLegend as CurveLegendClass } from './curve-legend.js';
 import type { LightCurve } from '../utils/types.js';
 import { LEGEND_SHAPES, sampleCurveAt } from '../utils/graph-math.js';
 
@@ -95,6 +96,24 @@ describe('curve-legend', () => {
     expect(items[1]!.classList.contains('selected')).toBe(true);
   });
 
+  it('shows an explicit editing affordance on the selected curve', async () => {
+    const el = makeLegend({ selectedCurveId: 'light.a' });
+    await el.updateComplete;
+    const selected = el.renderRoot.querySelector<HTMLElement>('.legend-item.selected')!;
+    expect(selected.querySelector('.editing-chip')?.textContent).toContain('Editing');
+    expect(selected.querySelector('.clear-edit-icon')?.getAttribute('aria-label')).toBe(
+      'Stop editing Alpha'
+    );
+  });
+
+  it('uses non-overlapping mobile action button hitboxes', () => {
+    const cssText = CurveLegendClass.styles.cssText;
+    expect(cssText).toContain('@media (max-width: 500px)');
+    expect(cssText).toContain('.clear-edit-icon');
+    expect(cssText).toContain('min-width: 32px;');
+    expect(cssText).not.toContain('margin: -12px;');
+  });
+
   it('sets aria-selected matching selectedCurveId', async () => {
     const el = makeLegend({ selectedCurveId: 'light.a' });
     await el.updateComplete;
@@ -160,6 +179,29 @@ describe('curve-legend', () => {
     eye.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
     expect(toggleSpy).toHaveBeenCalledTimes(1);
     expect(selectSpy).not.toHaveBeenCalled();
+  });
+
+  it('dispatches select-curve from the stop-editing affordance only once', async () => {
+    const el = makeLegend({ selectedCurveId: 'light.a' });
+    await el.updateComplete;
+    const spy = vi.fn();
+    el.addEventListener('select-curve', spy);
+    const clear = el.renderRoot.querySelector<HTMLButtonElement>('.clear-edit-icon')!;
+    clear.click();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![0].detail).toEqual({ entityId: 'light.a' });
+  });
+
+  it('does not also toggle the row when stop-editing is keyboard activated', async () => {
+    const el = makeLegend({ selectedCurveId: 'light.a' });
+    await el.updateComplete;
+    const spy = vi.fn();
+    el.addEventListener('select-curve', spy);
+    const clear = el.renderRoot.querySelector<HTMLButtonElement>('.clear-edit-icon')!;
+    clear.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    clear.click();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![0].detail).toEqual({ entityId: 'light.a' });
   });
 
   it('dispatches select-curve on item Enter key', async () => {
@@ -264,6 +306,23 @@ describe('curve-legend', () => {
     const expectedPct = Math.round(sampleCurveAt(curve.controlPoints, 50));
     expect(item.textContent).toContain(`${expectedPct}%`);
     expect(item.textContent).toContain('Alpha');
+  });
+
+  it('exposes the full light name as a title when row text is truncated', async () => {
+    const curve: LightCurve = {
+      entityId: 'light.long',
+      friendlyName: 'Ground Floor Living Room Main Ceiling Chandelier (Warm White)',
+      controlPoints: [
+        { lightener: 0, target: 0 },
+        { lightener: 100, target: 100 },
+      ],
+      visible: true,
+      color: '#2563eb',
+    };
+    const el = makeLegend({ curves: [curve] });
+    await el.updateComplete;
+    const name = el.renderRoot.querySelector<HTMLElement>('.name')!;
+    expect(name.title).toBe(curve.friendlyName);
   });
 
   describe('light management', () => {
@@ -390,6 +449,36 @@ describe('curve-legend', () => {
       expect(spy).toHaveBeenCalledTimes(1);
       expect(el.renderRoot.querySelector('ha-entity-picker')).not.toBeNull();
       expect(el.renderRoot.querySelector('.preset-field select')).not.toBeNull();
+    });
+
+    it('opening add light clears a pending remove confirmation', async () => {
+      const el = makeLegend();
+      el.canManage = true;
+      await el.updateComplete;
+
+      el.renderRoot.querySelector<HTMLButtonElement>('.remove-icon')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.confirm-row')).not.toBeNull();
+
+      el.renderRoot.querySelector<HTMLButtonElement>('.add-light-btn')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.confirm-row')).toBeNull();
+      expect(el.renderRoot.querySelector('.add-form')).not.toBeNull();
+    });
+
+    it('opening remove confirmation closes the add light form', async () => {
+      const el = makeLegend();
+      el.canManage = true;
+      await el.updateComplete;
+
+      el.renderRoot.querySelector<HTMLButtonElement>('.add-light-btn')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.add-form')).not.toBeNull();
+
+      el.renderRoot.querySelector<HTMLButtonElement>('.remove-icon')!.click();
+      await el.updateComplete;
+      expect(el.renderRoot.querySelector('.add-form')).toBeNull();
+      expect(el.renderRoot.querySelector('.confirm-row')).not.toBeNull();
     });
 
     it('closes the add form when closeAddSignal changes', async () => {

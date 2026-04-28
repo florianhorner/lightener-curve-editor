@@ -3,6 +3,7 @@
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -62,6 +63,35 @@ async def test_async_setup_registers_websocket_and_static_path(
     assert panel_custom["name"] == "lightener-editor-panel"
     assert panel_custom["embed_iframe"] is False
     assert panel_custom["trust_external"] is False
+    assert panel_custom["module_url"].startswith("/lightener/lightener-panel.js?v=")
+    assert panel_custom["js_url"].startswith("/lightener/lightener-panel.js?v=")
+
+
+async def test_async_setup_panel_urls_degrade_gracefully_without_manifest(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test panel URLs fall back to unversioned when manifest.json cannot be read."""
+
+    hass.http = MagicMock()
+    hass.http.async_register_static_paths = AsyncMock()
+    # Only the manifest read goes through async_add_executor_job in async_setup.
+    # Raising here is narrower than patching pathlib.Path.read_text globally.
+    hass.async_add_executor_job = AsyncMock(side_effect=OSError("manifest missing"))
+
+    with (
+        patch("custom_components.lightener.websocket.async_register_commands"),
+        patch(
+            "homeassistant.components.frontend.async_register_built_in_panel"
+        ) as register_panel,
+        caplog.at_level(logging.WARNING, logger="custom_components.lightener"),
+    ):
+        assert await async_setup(hass, {}) is True
+
+    hass.http.async_register_static_paths.assert_awaited_once()
+    assert "Could not read manifest.json" in caplog.text
+
+    panel_custom = register_panel.call_args.kwargs["config"]["_panel_custom"]
     assert panel_custom["module_url"] == "/lightener/lightener-panel.js"
     assert panel_custom["js_url"] == "/lightener/lightener-panel.js"
 

@@ -81,6 +81,41 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  version-sync:
+    name: "Version sync"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v4"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Set up Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: js/package-lock.json
+
+      - name: "Install frontend dependencies"
+        run: npm ci
+        working-directory: js
+
+      - name: "Check CARD_VERSION matches manifest.json"
+        run: |
+          python3 scripts/sync-version
+          cd js
+          npm run build
+          cd ..
+          if ! git diff --quiet; then
+            echo "::error::CARD_VERSION markers or generated frontend bundles are out of sync with manifest.json. Run scripts/sync-version, then rebuild the frontend bundle and commit the result."
+            git diff
+            exit 1
+          fi
+
   frontend:
     name: "Frontend"
     runs-on: "ubuntu-latest"

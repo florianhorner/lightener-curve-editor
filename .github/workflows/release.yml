@@ -17,6 +17,13 @@ jobs:
       - name: "Checkout the repository"
         uses: "actions/checkout@v4"
 
+      - name: "Set up Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: js/package-lock.json
+
       - name: "Adjust version number"
         shell: "bash"
         env:
@@ -26,8 +33,23 @@ jobs:
             echo "::error::Invalid tag format: $TAG_NAME — must match vX.Y.Z[-prerelease][+build]"
             exit 1
           fi
-          yq -i -o json '.version = strenv(TAG_NAME)' \
+          VERSION="${TAG_NAME#v}"
+          yq -i -o json '.version = strenv(VERSION)' \
             "${{ github.workspace }}/custom_components/lightener/manifest.json"
+
+      - name: "Sync CARD_VERSION in panel JS"
+        shell: "bash"
+        run: python3 "${{ github.workspace }}/scripts/sync-version"
+
+      - name: "Install frontend dependencies"
+        shell: "bash"
+        working-directory: "${{ github.workspace }}/js"
+        run: npm ci
+
+      - name: "Build frontend bundles"
+        shell: "bash"
+        working-directory: "${{ github.workspace }}/js"
+        run: npm run build
 
       - name: "ZIP the integration directory"
         shell: "bash"

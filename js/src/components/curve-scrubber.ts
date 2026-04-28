@@ -1,24 +1,19 @@
-import { LitElement, html, css } from 'lit';
-import { customElement, property, query, state } from 'lit/decorators.js';
+import { LitElement, html, css, nothing } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
 import { LightCurve } from '../utils/types.js';
-import { PAD_LEFT, PAD_RIGHT, VB_W, sampleCurveAt } from '../utils/graph-math.js';
+import { PAD_LEFT, PAD_RIGHT, VB_W } from '../utils/graph-math.js';
 
 @customElement('curve-scrubber')
 export class CurveScrubber extends LitElement {
   @property({ type: Array }) curves: LightCurve[] = [];
   @property({ type: Boolean }) readOnly = false;
+  @property({ type: Boolean }) previewActive = false;
+  @property({ type: Boolean }) canPreview = false;
 
+  @state() private _dragging = false;
   @state() private _position = 50; // 0-100
-  @state() private _overflowCount = 0;
-  @state() private _expanded = false;
-  @state() private _snappedMaxHeight: number | null = null;
 
-  @query('.value-badges') private _badgesRef!: HTMLElement | null;
-
-  private _dragging = false;
   private _trackRef: HTMLElement | null = null;
-  private _resizeObserver: ResizeObserver | null = null;
-  private _observedBadgesRef: HTMLElement | null = null;
 
   static styles = css`
     :host {
@@ -33,11 +28,79 @@ export class CurveScrubber extends LitElement {
         var(--secondary-text-color, #616161) 5%
       );
     }
+    .scrubber-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      min-height: 22px;
+    }
     .scrubber-label {
       font-size: 11px;
       font-weight: 600;
       color: var(--secondary-text-color, #616161);
-      margin-bottom: 10px;
+    }
+    .preview-toggle-btn {
+      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+      border-radius: 999px;
+      padding: 4px 11px;
+      font-size: 10px;
+      font-weight: 500;
+      background: transparent;
+      color: var(--secondary-text-color, #616161);
+      cursor: pointer;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition:
+        border-color 0.15s,
+        color 0.15s,
+        background 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .preview-toggle-btn:hover {
+      border-color: #2563eb;
+      color: #2563eb;
+      background: rgba(37, 99, 235, 0.04);
+    }
+    .preview-toggle-btn:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
+    .preview-toggle-btn.active {
+      border-color: #2563eb;
+      color: #2563eb;
+      background: rgba(37, 99, 235, 0.06);
+    }
+    .preview-live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #2563eb;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    .preview-restore-text {
+      opacity: 0.7;
+    }
+    @keyframes pulse-dot {
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.5;
+        transform: scale(0.8);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .preview-live-dot {
+        animation: none;
+        opacity: 0.6;
+      }
     }
     .track-area {
       position: relative;
@@ -107,82 +170,6 @@ export class CurveScrubber extends LitElement {
       font-variant-numeric: tabular-nums;
       pointer-events: none;
     }
-    .value-badges-wrap {
-      position: relative;
-      margin-top: 10px;
-    }
-    .value-badges {
-      display: flex;
-      gap: 4px 6px;
-      flex-wrap: wrap;
-      max-height: var(--curve-scrubber-badges-max-height, 46px);
-      overflow: hidden;
-    }
-    .badge {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-      background: rgba(128, 128, 128, 0.1);
-      white-space: nowrap;
-      min-width: 0;
-    }
-    button.badge.interactive {
-      cursor: pointer;
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #2563eb) 30%, transparent);
-      transition:
-        background 0.12s ease,
-        box-shadow 0.12s ease;
-      border: none;
-      font: inherit;
-      color: inherit;
-    }
-    button.badge.interactive:hover {
-      background: rgba(128, 128, 128, 0.14);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #2563eb) 60%, transparent);
-    }
-    button.badge.interactive:focus {
-      outline: none;
-    }
-    button.badge.interactive:focus-visible {
-      outline: 2px solid var(--primary-color, #2563eb);
-      outline-offset: 2px;
-    }
-    .badge-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .overflow-indicator {
-      position: absolute;
-      right: 0;
-      bottom: 0;
-      display: inline-flex;
-      align-items: center;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--secondary-text-color, #616161);
-      background: linear-gradient(
-        90deg,
-        transparent,
-        color-mix(
-            in srgb,
-            var(--ha-card-background, var(--card-background-color, #fff)) 94%,
-            var(--secondary-text-color, #616161) 6%
-          )
-          28%
-      );
-      cursor: pointer;
-      border: none;
-      font: inherit;
-    }
     @media (max-width: 500px) {
       .track-area {
         height: 36px;
@@ -201,47 +188,15 @@ export class CurveScrubber extends LitElement {
       .position-label {
         font-size: 12px;
       }
-      .badge {
-        font-size: 13px;
-        padding: 5px 10px;
-      }
       .scrubber-label {
         font-size: 11px;
       }
+      .preview-toggle-btn {
+        font-size: 11px;
+        padding: 5px 12px;
+      }
     }
   `;
-
-  /**
-   * Return a contrast-safe text color for badge values.
-   * Yellow (#ffca28) and orange (#ffa726) fail WCAG AA on light backgrounds,
-   * so we darken them to meet 4.5:1 ratio.
-   */
-  private _badgeTextColor(hex: string): string {
-    const low = hex.toLowerCase();
-    // Low-contrast colors on white/light backgrounds — use darkened variants
-    if (low === '#ffca28') return '#9e7c00'; // dark gold
-    if (low === '#ffa726') return '#b36b00'; // dark orange
-    return hex;
-  }
-
-  private _getInterpolatedValues(): {
-    entityId: string;
-    name: string;
-    color: string;
-    value: number;
-  }[] {
-    const pos = Math.round(this._position);
-    return this.curves
-      .filter((c) => c.visible)
-      .map((c) => {
-        return {
-          entityId: c.entityId,
-          name: c.friendlyName,
-          color: c.color,
-          value: Math.round(sampleCurveAt(c.controlPoints, pos)),
-        };
-      });
-  }
 
   private _onPointerDown(e: PointerEvent): void {
     if (this.readOnly) return;
@@ -300,23 +255,6 @@ export class CurveScrubber extends LitElement {
     this._emitPosition();
   }
 
-  private _renderBadgeContent(bar: { color: string; value: number }) {
-    return html`
-      <span class="badge-dot" style="background: ${bar.color}"></span>
-      <span style="color: ${this._badgeTextColor(bar.color)}">${bar.value}%</span>
-    `;
-  }
-
-  private _onBadgeClick(entityId: string, value: number): void {
-    this.dispatchEvent(
-      new CustomEvent('badge-click', {
-        detail: { entityId, value },
-        bubbles: true,
-        composed: true,
-      })
-    );
-  }
-
   private _emitPosition(): void {
     this.dispatchEvent(
       new CustomEvent('scrubber-move', {
@@ -327,90 +265,33 @@ export class CurveScrubber extends LitElement {
     );
   }
 
-  connectedCallback(): void {
-    super.connectedCallback();
-    if (typeof ResizeObserver !== 'undefined') {
-      this._resizeObserver = new ResizeObserver(() => this._measureBadgeOverflow());
-    }
-  }
-
-  disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this._resizeObserver?.disconnect();
-    this._resizeObserver = null;
-    this._observedBadgesRef = null;
+  private _onPreviewToggle(): void {
+    this.dispatchEvent(new CustomEvent('preview-toggle', { bubbles: true, composed: true }));
   }
 
   protected firstUpdated(): void {
     this._trackRef = this.renderRoot.querySelector('.track-area');
-    this._bindBadgeObserver();
-    // Defer past first paint so badge offsetHeights are stable before
-    // _measureBadgeOverflow snaps the max-height. A synchronous call here
-    // can catch the container mid-layout (e.g. while fonts are swapping),
-    // producing a wrong snapped height that collapses badges incorrectly.
-    requestAnimationFrame(() => this._measureBadgeOverflow());
-  }
-
-  protected updated(): void {
-    this._bindBadgeObserver();
-  }
-
-  private _bindBadgeObserver(): void {
-    if (!this._resizeObserver || !this._badgesRef || this._observedBadgesRef === this._badgesRef) {
-      return;
-    }
-
-    this._resizeObserver.disconnect();
-    this._resizeObserver.observe(this._badgesRef);
-    this._observedBadgesRef = this._badgesRef;
-  }
-
-  private _measureBadgeOverflow(): void {
-    const container = this._badgesRef;
-    if (!container) return;
-
-    // Skip measurement while expanded — all badges are visible so hiddenCount
-    // would be 0, immediately collapsing the panel and causing a flicker loop.
-    if (this._expanded) return;
-
-    const clipHeight = container.clientHeight;
-    const badges = [...container.querySelectorAll<HTMLElement>('.badge[data-value-badge="true"]')];
-
-    // Bail if badges haven't been laid out yet (offsetHeight 0 = pre-paint).
-    if (badges.length > 0 && badges.some((b) => b.offsetHeight === 0)) return;
-
-    const tallestBadge = badges.reduce((max, b) => Math.max(max, b.offsetHeight), 0);
-
-    // Snap the max-height to the bottom of the last fully-visible badge so no
-    // badge is shown half-cut. "Fully visible" = bottom edge within clipHeight.
-    const lastFullyVisible = [...badges]
-      .reverse()
-      .find((badge) => badge.offsetTop + badge.offsetHeight <= clipHeight);
-    const rawSnapped = lastFullyVisible
-      ? lastFullyVisible.offsetTop + lastFullyVisible.offsetHeight
-      : clipHeight;
-    // Never snap below a single badge row — a smaller value means the container
-    // hasn't settled (font swap, partial layout) and would wrongly hide all badges.
-    const snapped = Math.max(rawSnapped, tallestBadge);
-
-    // Count badges whose bottom exceeds the snapped boundary — those are the
-    // ones actually hidden by the snap. Counting against raw clipHeight would
-    // undercount when the last row is partially clipped.
-    const hiddenCount = badges.filter(
-      (badge) => badge.offsetTop + badge.offsetHeight > snapped
-    ).length;
-
-    if (hiddenCount !== this._overflowCount) this._overflowCount = hiddenCount;
-    if (snapped !== this._snappedMaxHeight) this._snappedMaxHeight = snapped;
   }
 
   render() {
-    const bars = this._getInterpolatedValues();
     const pos = Math.round(this._position);
 
     return html`
       <div class="scrubber-panel">
-        <div class="scrubber-label">At brightness</div>
+        <div class="scrubber-header">
+          <div class="scrubber-label">At brightness</div>
+          ${this.canPreview
+            ? this.previewActive
+              ? html`<button class="preview-toggle-btn active" @click=${this._onPreviewToggle}>
+                  <span class="preview-live-dot"></span>
+                  Previewing &nbsp;·&nbsp;
+                  <span class="preview-restore-text">Restore</span>
+                </button>`
+              : html`<button class="preview-toggle-btn" @click=${this._onPreviewToggle}>
+                  Preview on lights
+                </button>`
+            : nothing}
+        </div>
         <div
           class="track-area"
           role="slider"
@@ -435,47 +316,6 @@ export class CurveScrubber extends LitElement {
             @pointerup=${this._onPointerUp}
             @lostpointercapture=${this._onPointerUp}
           ></div>
-        </div>
-
-        <div class="value-badges-wrap">
-          <div
-            class="value-badges"
-            style="${this._expanded
-              ? 'max-height: none;'
-              : this._snappedMaxHeight !== null
-                ? `max-height: ${this._snappedMaxHeight}px;`
-                : ''}"
-          >
-            ${bars.map((bar) =>
-              this.readOnly
-                ? html`<div class="badge" data-value-badge="true">
-                    ${this._renderBadgeContent(bar)}
-                  </div>`
-                : html`<button
-                    type="button"
-                    class="badge interactive"
-                    data-value-badge="true"
-                    aria-label="Set ${bar.name} to ${bar.value}%"
-                    @click=${() => this._onBadgeClick(bar.entityId, bar.value)}
-                  >
-                    ${this._renderBadgeContent(bar)}
-                  </button>`
-            )}
-          </div>
-          ${this._overflowCount > 0 || this._expanded
-            ? html`<button
-                class="overflow-indicator"
-                aria-expanded=${this._expanded}
-                aria-label="${this._expanded
-                  ? 'Collapse light list'
-                  : `Show ${this._overflowCount} more lights`}"
-                @click=${() => {
-                  this._expanded = !this._expanded;
-                }}
-              >
-                ${this._expanded ? 'Collapse' : `+${this._overflowCount} more`}
-              </button>`
-            : null}
         </div>
       </div>
     `;

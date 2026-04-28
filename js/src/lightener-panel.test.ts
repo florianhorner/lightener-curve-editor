@@ -44,6 +44,10 @@ describe('lightener-editor-panel', () => {
   beforeEach(() => {
     document.body.replaceChildren();
     window.localStorage.clear();
+    window.sessionStorage.clear();
+    (
+      window as unknown as { __LIGHTENER_CURVE_CARD_VERSION__?: string }
+    ).__LIGHTENER_CURVE_CARD_VERSION__ = '2.15.0';
   });
 
   it('clears the mounted curve card when no valid entity remains', async () => {
@@ -87,6 +91,28 @@ describe('lightener-editor-panel', () => {
       'This Lightener integration does not have an editable group yet.'
     );
     expect(mount.textContent).toContain('No editable Lightener group yet');
+  });
+
+  it('reloads once instead of reusing a pre-registered stale curve card class', async () => {
+    const Panel = customElements.get('lightener-editor-panel');
+    if (!Panel) {
+      throw new Error('lightener-editor-panel was not defined');
+    }
+    const panel = new Panel() as HTMLElement & {
+      _ensureCardScriptLoaded: () => Promise<void>;
+      _reloadForStaleCard: () => void;
+    };
+    let reloadRequested = false;
+    (
+      window as unknown as { __LIGHTENER_CURVE_CARD_VERSION__?: string }
+    ).__LIGHTENER_CURVE_CARD_VERSION__ = '2.14.0';
+    panel._reloadForStaleCard = () => {
+      reloadRequested = true;
+    };
+
+    await panel._ensureCardScriptLoaded();
+
+    expect(reloadRequested).toBe(true);
   });
 
   it('shows an inline save or discard guard before switching entities with unsaved changes', async () => {

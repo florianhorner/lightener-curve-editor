@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { LightCurve, Hass } from './utils/types.js';
+import { EntityPickerLoader } from './utils/entity-picker-loader.js';
 import { curvesToWsPayload, wsPayloadToCurves, cloneCurves, curvesEqual } from './utils/data.js';
 import { easeOutCubic, sampleCurveAt, CURVE_COLORS } from './utils/graph-math.js';
 import { CURVE_PRESETS, presetPolylinePoints, type PresetDef } from './utils/presets.js';
@@ -17,8 +18,15 @@ import './components/curve-scrubber.js';
 import './components/curve-legend.js';
 import './components/curve-footer.js';
 
+const CARD_VERSION = '2.15.0';
 const SAVE_SUCCESS_DISPLAY_MS = 2000;
 const CANCEL_ANIM_DURATION_MS = 300;
+
+if (typeof window !== 'undefined') {
+  (
+    window as typeof window & { __LIGHTENER_CURVE_CARD_VERSION__?: string }
+  ).__LIGHTENER_CURVE_CARD_VERSION__ = CARD_VERSION;
+}
 
 const WARNING_ICON = html`<svg
   class="status-icon"
@@ -85,8 +93,10 @@ const LIGHT_DOMAINS = ['light'];
 export class LightenerCurveCardEditor extends LitElement {
   @state() private _config: Record<string, unknown> = {};
   @state() private _hass: Hass | null = null;
-  @state() private _pickerReady = false;
-  private _pickerLoadStarted = false;
+  private _picker = new EntityPickerLoader(
+    () => this.isConnected,
+    () => this.requestUpdate()
+  );
 
   static styles = css`
     :host {
@@ -132,17 +142,17 @@ export class LightenerCurveCardEditor extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    this._ensurePickerLoaded();
+    this._picker.ensureLoaded();
   }
 
   setConfig(config: Record<string, unknown>): void {
     this._config = config;
-    this._ensurePickerLoaded();
+    this._picker.ensureLoaded();
   }
 
   set hass(hass: Hass) {
     this._hass = hass;
-    this._ensurePickerLoaded();
+    this._picker.ensureLoaded();
   }
 
   private _fireConfigChanged(): void {
@@ -167,56 +177,6 @@ export class LightenerCurveCardEditor extends LitElement {
     this._fireConfigChanged();
   }
 
-  // HA lazy-loads <ha-entity-picker>; when our editor is the first thing on
-  // the page to reference it, the tag is never registered and the element
-  // renders blank. Pull it into the registry ourselves by instantiating a
-  // core card's config editor (hui-entities-card transitively defines it).
-  // Falls back to a plain <input> if the picker never becomes available.
-  private _ensurePickerLoaded(): void {
-    if (this._pickerLoadStarted) return;
-    this._pickerLoadStarted = true;
-    if (customElements.get('ha-entity-picker')) {
-      this._pickerReady = true;
-      return;
-    }
-    const kickLoaders = async () => {
-      try {
-        const loadHelpers = (window as unknown as { loadCardHelpers?: () => Promise<unknown> })
-          .loadCardHelpers;
-        if (typeof loadHelpers === 'function') await loadHelpers();
-      } catch {
-        /* ignore — we still have the direct path below */
-      }
-      try {
-        const entitiesCard = customElements.get('hui-entities-card') as
-          | (CustomElementConstructor & { getConfigElement?: () => Promise<HTMLElement> })
-          | undefined;
-        await entitiesCard?.getConfigElement?.();
-      } catch {
-        /* ignore — whenDefined below will time out and we fall back */
-      }
-    };
-    kickLoaders();
-    const ready = customElements.whenDefined('ha-entity-picker');
-    const timeout = new Promise<void>((r) => setTimeout(r, 1500));
-    Promise.race([ready, timeout]).then(() => {
-      if (!this.isConnected) return;
-      this._pickerReady = !!customElements.get('ha-entity-picker');
-      if (!this._pickerReady) {
-        console.warn(
-          '[lightener-curve-card] <ha-entity-picker> not available — falling back to plain input.'
-        );
-        // Picker may register after the 1500ms window; upgrade when it does.
-        customElements.whenDefined('ha-entity-picker').then(() => {
-          if (!this.isConnected) return;
-          this._pickerReady = true;
-          this.requestUpdate();
-        });
-      }
-      this.requestUpdate();
-    });
-  }
-
   private _onFallbackEntityInput(e: Event): void {
     const value = (e.target as HTMLInputElement).value.trim();
     this._config = { ...this._config, entity: value || undefined };
@@ -231,7 +191,7 @@ export class LightenerCurveCardEditor extends LitElement {
       <div class="form">
         <div class="field">
           <label>Entity</label>
-          ${this._pickerReady
+          ${this._picker.ready
             ? html`
                 <ha-entity-picker
                   .hass=${this._hass}
@@ -310,6 +270,7 @@ export class LightenerCurveCard extends LitElement {
   @state() private _previewActive = false;
   @state() private _showPresets = false;
   @state() private _legendCloseAddSignal = 0;
+  @state() private _legendCloseRemoveSignal = 0;
   private _previewRafPending = false;
   private _previewTrailingTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastPreviewTime = 0;
@@ -459,15 +420,6 @@ export class LightenerCurveCard extends LitElement {
         opacity: 0;
       }
     }
-    .preview-notice {
-      font-size: var(--text-sm);
-      color: var(--secondary-text-color, #616161);
-      padding: 0;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      opacity: 0.8;
-    }
     .status-icon {
       width: 14px;
       height: 14px;
@@ -533,15 +485,6 @@ export class LightenerCurveCard extends LitElement {
     .loading-caption {
       font-size: var(--text-sm);
       color: var(--secondary-text);
-    }
-    @keyframes pulse {
-      0%,
-      100% {
-        opacity: 0.5;
-      }
-      50% {
-        opacity: 1;
-      }
     }
     @keyframes fade-in {
       from {
@@ -696,63 +639,9 @@ export class LightenerCurveCard extends LitElement {
       opacity: 0.65;
       margin-bottom: 2px;
     }
-    .preview-toggle-row {
-      display: flex;
-      align-items: center;
-    }
-    .preview-toggle-btn {
-      border: 1px solid var(--divider);
-      border-radius: 999px;
-      padding: 6px 14px;
-      min-height: 44px;
-      font-size: 11px;
-      font-weight: 500;
-      background: transparent;
-      color: var(--secondary-text);
-      cursor: pointer;
-      font-family: inherit;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition:
-        border-color 0.15s,
-        color 0.15s,
-        background 0.15s;
-    }
-    .preview-toggle-btn:hover {
-      border-color: #2563eb;
-      color: #2563eb;
-      background: rgba(37, 99, 235, 0.04);
-    }
-    .preview-toggle-btn:focus-visible {
-      outline: 2px solid #2563eb;
-      outline-offset: 2px;
-    }
-    .preview-toggle-btn.active {
-      border-color: #2563eb;
-      color: #2563eb;
-      background: rgba(37, 99, 235, 0.06);
-    }
-    .preview-live-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #2563eb;
-      animation: pulse-dot 1.4s ease-in-out infinite;
-      flex-shrink: 0;
-    }
-    .preview-restore-text {
-      opacity: 0.7;
-    }
-    @keyframes pulse-dot {
-      0%,
-      100% {
-        opacity: 1;
-        transform: scale(1);
-      }
-      50% {
-        opacity: 0.5;
-        transform: scale(0.8);
+    @media (prefers-reduced-motion: reduce) {
+      .loading-graph {
+        animation: none;
       }
     }
   `;
@@ -904,10 +793,11 @@ export class LightenerCurveCard extends LitElement {
     this._showPresets = opening;
     if (opening) {
       this._legendCloseAddSignal++;
+      this._legendCloseRemoveSignal++;
     }
   }
 
-  private _onLegendAddPanelOpen(): void {
+  private _onLegendPanelOpen(): void {
     this._showPresets = false;
   }
 
@@ -1086,19 +976,13 @@ export class LightenerCurveCard extends LitElement {
     // No-op: preview is now controlled by the explicit preview toggle button
   }
 
-  private _onBadgeClick(e: CustomEvent): void {
-    if (!this._hass || !this._isAdmin) return;
-    const { entityId, value } = e.detail as { entityId: string; value: number };
-    if (!this._curves.find((c) => c.entityId === entityId)?.visible) return;
-    const brightness = Math.round((value / 100) * 255);
-    if (brightness === 0) {
-      this._hass.callService('light', 'turn_off', { entity_id: entityId }).catch(() => {});
+  private _onPreviewToggle = (): void => {
+    if (this._previewActive) {
+      this._stopPreview();
     } else {
-      this._hass
-        .callService('light', 'turn_on', { entity_id: entityId, brightness })
-        .catch(() => {});
+      this._startPreview();
     }
-  }
+  };
 
   private _startPreview = (): void => {
     if (!this._hass || this._previewActive) return;
@@ -1591,29 +1475,13 @@ export class LightenerCurveCard extends LitElement {
               ? html`<curve-scrubber
                   .curves=${this._curves}
                   .readOnly=${!this._isAdmin || this._managingLights}
+                  .canPreview=${this._isAdmin && !this._cancelAnimating && !this._managingLights}
+                  .previewActive=${this._previewActive}
                   @scrubber-move=${this._onScrubberMove}
                   @scrubber-start=${this._onScrubberStart}
                   @scrubber-end=${this._onScrubberEnd}
-                  @badge-click=${this._onBadgeClick}
+                  @preview-toggle=${this._onPreviewToggle}
                 ></curve-scrubber>`
-              : nothing}
-            ${this._isAdmin &&
-            this._curves.length > 0 &&
-            !this._cancelAnimating &&
-            !this._managingLights
-              ? html`
-                  <div class="preview-toggle-row">
-                    ${this._previewActive
-                      ? html`<button class="preview-toggle-btn active" @click=${this._stopPreview}>
-                          <span class="preview-live-dot"></span>
-                          Previewing on lights &nbsp;·&nbsp;
-                          <span class="preview-restore-text">Restore</span>
-                        </button>`
-                      : html`<button class="preview-toggle-btn" @click=${this._startPreview}>
-                          Preview on lights
-                        </button>`}
-                  </div>
-                `
               : nothing}
           </div>
 
@@ -1626,10 +1494,12 @@ export class LightenerCurveCard extends LitElement {
               .managing=${this._managingLights}
               .excludeEntityIds=${this._entityId ? [this._entityId] : []}
               .closeAddSignal=${this._legendCloseAddSignal}
+              .closeRemoveSignal=${this._legendCloseRemoveSignal}
               .hass=${this._hass}
               @select-curve=${this._onSelectCurve}
               @toggle-curve=${this._onToggleCurve}
-              @add-panel-open=${this._onLegendAddPanelOpen}
+              @add-panel-open=${this._onLegendPanelOpen}
+              @remove-panel-open=${this._onLegendPanelOpen}
               @add-light=${this._onAddLight}
               @remove-light=${this._onRemoveLight}
             ></curve-legend>
@@ -1654,11 +1524,6 @@ export class LightenerCurveCard extends LitElement {
         </div>
 
         <div class="status-stack">
-          ${this._previewActive
-            ? html`<div class="preview-notice" role="status" aria-live="polite">
-                Live preview active — click Restore to reset
-              </div>`
-            : nothing}
           ${this._saveSuccess
             ? html`<div class="success" role="status" aria-live="polite">
                 <svg
