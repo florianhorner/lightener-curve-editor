@@ -33,15 +33,10 @@ jobs:
             echo "::error::Invalid tag format: $TAG_NAME — must match vX.Y.Z[-prerelease][+build]"
             exit 1
           fi
-          VERSION="${TAG_NAME#v}"
-          python3 -c "
-import json, pathlib
-p = pathlib.Path('${{ github.workspace }}/custom_components/lightener/manifest.json')
-m = json.loads(p.read_text())
-m['version'] = '${VERSION}'
-p.write_text(json.dumps(m, indent=2) + '\n')
-print('manifest.json version set to', m['version'])
-"
+          export VERSION="${TAG_NAME#v}"
+          yq -i -o json '.version = strenv(VERSION)' \
+            "${{ github.workspace }}/custom_components/lightener/manifest.json"
+          echo "manifest.json version set to $VERSION"
 
       - name: "Sync CARD_VERSION in panel JS"
         shell: "bash"
