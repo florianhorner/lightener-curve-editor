@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
@@ -29,7 +30,19 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     try:
         _manifest_path = Path(__file__).parent / "manifest.json"
         _manifest_text = await hass.async_add_executor_job(_manifest_path.read_text)
-        _version = json.loads(_manifest_text).get("version", "")
+        _raw_version = json.loads(_manifest_text).get("version", "")
+        _version = (
+            _raw_version
+            if re.fullmatch(
+                r"[0-9]+\.[0-9]+\.[0-9]+(?:[.\-][A-Za-z0-9]+)*", _raw_version
+            )
+            else ""
+        )
+        if _raw_version and not _version:
+            _LOGGER.warning(
+                "manifest.json version %r contains unsafe characters; skipping cache-busting",
+                _raw_version,
+            )
     except Exception as e:
         _LOGGER.warning("Could not read manifest.json for version cache-busting: %s", e)
         _version = ""
@@ -43,18 +56,27 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     # Serve the frontend card and panel JS.
     # hass.http is unavailable during some tests. StaticPathConfig is preferred
     # when available, with a fallback for older HA versions.
+    _card_file = str(Path(__file__).parent / "frontend" / "lightener-curve-card.js")
     try:
         if getattr(hass, "http", None) is not None:
             static_paths = [
-                (
-                    "/lightener/lightener-curve-card.js",
-                    str(Path(__file__).parent / "frontend" / "lightener-curve-card.js"),
-                ),
+                # Unversioned path kept for back-compat (users who manually added the
+                # Lovelace resource at this URL continue to get the card served).
+                ("/lightener/lightener-curve-card.js", _card_file),
+            ]
+            # Versioned path: forces a SW cache miss on upgrade because the URL path
+            # itself changes. lightener-panel.js imports from this versioned URL.
+            # Both entries point to the same physical file on disk.
+            if _version:
+                static_paths.append(
+                    (f"/lightener/lightener-curve-card.{_version}.js", _card_file)
+                )
+            static_paths.append(
                 (
                     "/lightener/lightener-panel.js",
                     str(Path(__file__).parent / "frontend" / "lightener-panel.js"),
-                ),
-            ]
+                )
+            )
             registered = False
 
             try:
