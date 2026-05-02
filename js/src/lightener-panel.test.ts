@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 beforeAll(async () => {
   if (!customElements.get('lightener-curve-card')) {
@@ -45,9 +45,12 @@ describe('lightener-editor-panel', () => {
     document.body.replaceChildren();
     window.localStorage.clear();
     window.sessionStorage.clear();
+    // Use the panel's own published CARD_VERSION so this doesn't drift on version bumps.
+    const panelVer = (window as unknown as { __LIGHTENER_PANEL_CARD_VERSION__?: string })
+      .__LIGHTENER_PANEL_CARD_VERSION__;
     (
       window as unknown as { __LIGHTENER_CURVE_CARD_VERSION__?: string }
-    ).__LIGHTENER_CURVE_CARD_VERSION__ = '2.15.0';
+    ).__LIGHTENER_CURVE_CARD_VERSION__ = panelVer ?? '0.0.0';
   });
 
   it('clears the mounted curve card when no valid entity remains', async () => {
@@ -113,6 +116,110 @@ describe('lightener-editor-panel', () => {
     await panel._ensureCardScriptLoaded();
 
     expect(reloadRequested).toBe(true);
+  });
+
+  it('does not reload when the registered card class version matches CARD_VERSION', async () => {
+    const Panel = customElements.get('lightener-editor-panel');
+    if (!Panel) {
+      throw new Error('lightener-editor-panel was not defined');
+    }
+    const panel = new Panel() as HTMLElement & {
+      _ensureCardScriptLoaded: () => Promise<void>;
+      _reloadForStaleCard: () => void;
+    };
+    let reloadRequested = false;
+    const w = window as unknown as {
+      __LIGHTENER_CURVE_CARD_VERSION__?: string;
+      __LIGHTENER_PANEL_CARD_VERSION__?: string;
+    };
+    const prev = w.__LIGHTENER_CURVE_CARD_VERSION__;
+    // Derive the expected version from the panel's own published constant rather
+    // than hardcoding it — scripts/sync-version keeps it in sync with manifest.json.
+    const panelCardVersion = w.__LIGHTENER_PANEL_CARD_VERSION__;
+    if (!panelCardVersion)
+      throw new Error('__LIGHTENER_PANEL_CARD_VERSION__ not set by panel module');
+    w.__LIGHTENER_CURVE_CARD_VERSION__ = panelCardVersion;
+    panel._reloadForStaleCard = () => {
+      reloadRequested = true;
+    };
+
+    try {
+      await panel._ensureCardScriptLoaded();
+      expect(reloadRequested).toBe(false);
+    } finally {
+      if (prev === undefined) {
+        delete w.__LIGHTENER_CURVE_CARD_VERSION__;
+      } else {
+        w.__LIGHTENER_CURVE_CARD_VERSION__ = prev;
+      }
+    }
+  });
+
+  it('builds a path-stamped card module URL without a ?v= query string', async () => {
+    const Panel = customElements.get('lightener-editor-panel');
+    if (!Panel) {
+      throw new Error('lightener-editor-panel was not defined');
+    }
+    const panel = new Panel() as HTMLElement & {
+      _ensureCardScriptLoaded: () => Promise<void>;
+      _reloadForStaleCard: () => void;
+      _cardModuleUrl?: string;
+      _cardScriptPromise?: Promise<unknown>;
+    };
+    // Clear any previous promise so the URL is re-computed.
+    panel._cardScriptPromise = undefined;
+    // Unregister the fake card temporarily so the URL-construction branch runs.
+    const savedGet = customElements.get.bind(customElements);
+    vi.spyOn(customElements, 'get').mockImplementationOnce((name) => {
+      if (name === 'lightener-curve-card') return undefined;
+      return savedGet(name);
+    });
+
+    // Do not await: the assignment to _cardModuleUrl is synchronous (before the
+    // import() call), so we can read it immediately. import() itself will reject in
+    // jsdom (no real module loader) but we only need the URL here.
+    panel._ensureCardScriptLoaded().catch(() => {});
+
+    expect(panel._cardModuleUrl).toBeDefined();
+    expect(panel._cardModuleUrl).toMatch(/\/lightener\/lightener-curve-card\.[^/]+\.js$/);
+    expect(panel._cardModuleUrl).not.toContain('?v=');
+  });
+
+  it('reloads after fallback import when the fallback-loaded card version is stale', async () => {
+    const Panel = customElements.get('lightener-editor-panel');
+    if (!Panel) {
+      throw new Error('lightener-editor-panel was not defined');
+    }
+    const panel = new Panel() as HTMLElement & {
+      _ensureCardScriptLoaded: () => Promise<void>;
+      _reloadForStaleCard: () => void;
+      _cardUsedFallback: boolean;
+      _cardScriptPromise?: Promise<unknown>;
+    };
+    let reloadRequested = false;
+    panel._reloadForStaleCard = () => {
+      reloadRequested = true;
+    };
+    // Simulate: fallback was used and the fallback-loaded card reported an old version.
+    panel._cardUsedFallback = true;
+    panel._cardScriptPromise = Promise.resolve();
+    (
+      window as unknown as { __LIGHTENER_CURVE_CARD_VERSION__?: string }
+    ).__LIGHTENER_CURVE_CARD_VERSION__ = '2.14.0';
+    // Mask the already-registered FakeCurveCard so _ensureCardScriptLoaded skips
+    // the pre-registered-class branch and reaches the post-fallback stale check.
+    const savedGet = customElements.get.bind(customElements);
+    const getSpy = vi.spyOn(customElements, 'get').mockImplementation((name) => {
+      if (name === 'lightener-curve-card') return undefined;
+      return savedGet(name);
+    });
+
+    try {
+      await panel._ensureCardScriptLoaded();
+      expect(reloadRequested).toBe(true);
+    } finally {
+      getSpy.mockRestore();
+    }
   });
 
   it('shows an inline save or discard guard before switching entities with unsaved changes', async () => {

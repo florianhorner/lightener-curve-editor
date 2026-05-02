@@ -1,6 +1,9 @@
-const CARD_VERSION = "2.15.0";
+const CARD_VERSION = "2.15.0-dev.5";
 const CARD_VERSION_GLOBAL = "__LIGHTENER_CURVE_CARD_VERSION__";
+const PANEL_VERSION_GLOBAL = "__LIGHTENER_PANEL_CARD_VERSION__";
 const CARD_STALE_RELOAD_KEY = "lightener_curve_card_reload_version";
+// Expose the panel's compiled-in card version for debugging and tests.
+window[PANEL_VERSION_GLOBAL] = CARD_VERSION;
 
 class LightenerEditorPanel extends HTMLElement {
   constructor() {
@@ -13,6 +16,7 @@ class LightenerEditorPanel extends HTMLElement {
     this._cardDirty = false;
     this._switchSaving = false;
     this._cardScriptPromise = null;
+    this._cardUsedFallback = false;
     this._lightenerEntities = null;
     this._loadingEntities = false;
     this._requestedConfigEntryId = null;
@@ -138,17 +142,51 @@ class LightenerEditorPanel extends HTMLElement {
       return;
     }
     if (!this._cardScriptPromise) {
-      const moduleUrl = CARD_VERSION
-        ? `/lightener/lightener-curve-card.js?v=${CARD_VERSION}`
+      // Strip SemVer build metadata (e.g. +build.4) — the server registers the
+      // path without the + segment because + is reserved in URL paths.
+      const cardUrlVersion = CARD_VERSION ? CARD_VERSION.split("+")[0] : "";
+      const moduleUrl = cardUrlVersion
+        ? `/lightener/lightener-curve-card.${cardUrlVersion}.js`
         : "/lightener/lightener-curve-card.js";
-      this._cardScriptPromise = import(/* @vite-ignore */ moduleUrl).then((module) => {
-        if (CARD_VERSION) {
-          window[CARD_VERSION_GLOBAL] = CARD_VERSION;
-        }
-        return module;
-      });
+      this._cardModuleUrl = moduleUrl;
+      const fallbackUrl = "/lightener/lightener-curve-card.js";
+      this._cardUsedFallback = false;
+      this._cardScriptPromise = import(/* @vite-ignore */ moduleUrl)
+        .catch((err) => {
+          // Versioned URL not found — likely a SW-cached stale panel requesting an
+          // old path-stamped URL the new server hasn't registered. Fall back to the
+          // unversioned path so the load succeeds rather than hard-erroring.
+          console.debug("[lightener] versioned card URL failed, falling back to unversioned:", err);
+          this._cardUsedFallback = true;
+          this._cardModuleUrl = fallbackUrl;
+          return import(/* @vite-ignore */ fallbackUrl);
+        })
+        .then((module) => {
+          // Only stamp the version global when the versioned URL was used. When falling
+          // back to the unversioned path the card bundle sets the global at eval time
+          // with its own actual version — leaving it untouched lets the stale-card
+          // reload guard see the real card version rather than the panel's assumption.
+          if (CARD_VERSION && !this._cardUsedFallback) {
+            window[CARD_VERSION_GLOBAL] = CARD_VERSION;
+          }
+          return module;
+        })
+        .catch((err) => {
+          // Both versioned and fallback imports failed. Clear the cached promise so
+          // the next _syncCard() call retries from scratch rather than permanently
+          // re-throwing this rejection.
+          this._cardScriptPromise = null;
+          throw err;
+        });
     }
     await this._cardScriptPromise;
+    // When the fallback (unversioned) URL was used, the card bundle sets
+    // window[CARD_VERSION_GLOBAL] at eval time. If it reports a different version
+    // than what this panel was compiled for, trigger the stale-card reload so the
+    // correct bundle takes over — the same guard that runs for pre-registered classes.
+    if (this._cardUsedFallback && CARD_VERSION && window[CARD_VERSION_GLOBAL] !== CARD_VERSION) {
+      this._reloadForStaleCard();
+    }
   }
 
   _reloadForStaleCard() {
@@ -164,6 +202,13 @@ class LightenerEditorPanel extends HTMLElement {
       // sessionStorage unavailable — skip reload to avoid an infinite reload loop.
       return;
     }
+    console.debug(
+      "[lightener] stale card detected (loaded:",
+      window[CARD_VERSION_GLOBAL],
+      "expected:",
+      CARD_VERSION,
+      "). Reloading once."
+    );
     window.location.reload();
   }
 

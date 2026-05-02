@@ -223,6 +223,25 @@ Source: /design-review on master branch — cross-model (Claude + Codex GPT-5.4 
   Breakpoints section missing entirely. Update DESIGN.md so it reflects all live tokens.
   Priority: P2 (docs lag implementation)
 
+---
+
+## Deferred from Issue #53 (autoplan 2026-04-29)
+
+Source: /autoplan on branch issue-53
+
+### P2
+
+- [ ] **Panel JS is still query-versioned — follow-on to issue #53**
+  `custom_components/lightener/__init__.py` serves `lightener-panel.js?v=X` (query param).
+  If Workbox SW ignores query params on panel assets too, an old cached panel could load
+  and request the old path-stamped card URL (e.g. `lightener-curve-card.2.14.0.js`), which
+  the new server hasn't registered → 404. Fix: path-stamp the panel URL too, similar to
+  the card path-stamping done in issue #53.
+  Affects: `custom_components/lightener/__init__.py`, `custom_components/lightener/frontend/lightener-panel.js`
+  Priority: P2 (edge case — only hits when panel is in SW cache AND card version changed)
+
+---
+
 ### P3 — Demo Page Polish
 
 - [ ] **"Centered everything" on demo page — consider left-aligning secondary content**

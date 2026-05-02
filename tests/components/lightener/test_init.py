@@ -1,6 +1,7 @@
 """Tests for __init__."""
 
 import logging
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -45,17 +46,32 @@ async def test_async_setup_registers_websocket_and_static_path(
     register_panel.assert_called_once()
 
     paths = hass.http.async_register_static_paths.await_args.args[0]
-    assert len(paths) == 2
-    assert paths[0].url_path == "/lightener/lightener-curve-card.js"
-    assert paths[0].path.endswith(
+    by_url = {p.url_path: p for p in paths}
+
+    unversioned = by_url["/lightener/lightener-curve-card.js"]
+    assert unversioned.path.endswith(
         "/custom_components/lightener/frontend/lightener-curve-card.js"
     )
-    assert paths[0].cache_headers is False
-    assert paths[1].url_path == "/lightener/lightener-panel.js"
-    assert paths[1].path.endswith(
+    assert unversioned.cache_headers is False
+
+    versioned_keys = [
+        k
+        for k in by_url
+        if k != "/lightener/lightener-curve-card.js"
+        and re.fullmatch(r"/lightener/lightener-curve-card\.[^/]+\.js", k)
+    ]
+    assert len(versioned_keys) == 1
+    versioned = by_url[versioned_keys[0]]
+    assert versioned.path.endswith(
+        "/custom_components/lightener/frontend/lightener-curve-card.js"
+    )
+    assert versioned.cache_headers is False
+
+    panel = by_url["/lightener/lightener-panel.js"]
+    assert panel.path.endswith(
         "/custom_components/lightener/frontend/lightener-panel.js"
     )
-    assert paths[1].cache_headers is False
+    assert panel.cache_headers is False
 
     assert register_panel.call_args.args[1] == "custom"
     assert register_panel.call_args.kwargs["frontend_url_path"] == "lightener-editor"
@@ -94,6 +110,92 @@ async def test_async_setup_panel_urls_degrade_gracefully_without_manifest(
     panel_custom = register_panel.call_args.kwargs["config"]["_panel_custom"]
     assert panel_custom["module_url"] == "/lightener/lightener-panel.js"
     assert panel_custom["js_url"] == "/lightener/lightener-panel.js"
+
+
+async def test_async_setup_versioned_path_omitted_without_version(
+    hass: HomeAssistant,
+) -> None:
+    """Test that the versioned card path is skipped when manifest has no version key."""
+
+    hass.http = MagicMock()
+    hass.http.async_register_static_paths = AsyncMock()
+    hass.async_add_executor_job = AsyncMock(return_value="{}")
+
+    with (
+        patch("custom_components.lightener.websocket.async_register_commands"),
+        patch("homeassistant.components.frontend.async_register_built_in_panel"),
+    ):
+        assert await async_setup(hass, {}) is True
+
+    paths = hass.http.async_register_static_paths.await_args.args[0]
+    by_url = {p.url_path: p for p in paths}
+    assert "/lightener/lightener-curve-card.js" in by_url
+    assert "/lightener/lightener-panel.js" in by_url
+    assert not any(
+        re.fullmatch(r"/lightener/lightener-curve-card\.[^/]+\.js", k)
+        for k in by_url
+        if k != "/lightener/lightener-curve-card.js"
+    )
+
+
+async def test_async_setup_skips_versioned_path_for_unsafe_version(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test that a version string with unsafe characters is rejected with a warning."""
+
+    hass.http = MagicMock()
+    hass.http.async_register_static_paths = AsyncMock()
+    hass.async_add_executor_job = AsyncMock(return_value='{"version": "../../evil"}')
+
+    with (
+        patch("custom_components.lightener.websocket.async_register_commands"),
+        patch("homeassistant.components.frontend.async_register_built_in_panel"),
+        caplog.at_level(logging.WARNING, logger="custom_components.lightener"),
+    ):
+        assert await async_setup(hass, {}) is True
+
+    paths = hass.http.async_register_static_paths.await_args.args[0]
+    by_url = {p.url_path: p for p in paths}
+    assert "/lightener/lightener-curve-card.js" in by_url
+    assert "/lightener/lightener-panel.js" in by_url
+    assert not any(
+        re.fullmatch(r"/lightener/lightener-curve-card\.[^/]+\.js", k)
+        for k in by_url
+        if k != "/lightener/lightener-curve-card.js"
+    )
+    assert "unsafe characters" in caplog.text
+
+
+async def test_async_setup_strips_build_metadata_from_versioned_path(
+    hass: HomeAssistant,
+) -> None:
+    """A SemVer build-metadata segment (+build.N) must be stripped from the URL.
+
+    Documents the chosen behavior: two builds that share a SemVer core but differ
+    only in build metadata (e.g. 2.15.0+build.1 vs 2.15.0+build.2) collapse to the
+    same versioned URL. This is acceptable because the project's release flow always
+    bumps SemVer; pure build-metadata-only releases would not invalidate the SW
+    cache and are therefore not a supported upgrade vector.
+    """
+
+    hass.http = MagicMock()
+    hass.http.async_register_static_paths = AsyncMock()
+    hass.async_add_executor_job = AsyncMock(
+        return_value='{"version": "2.15.0+build.4"}'
+    )
+
+    with (
+        patch("custom_components.lightener.websocket.async_register_commands"),
+        patch("homeassistant.components.frontend.async_register_built_in_panel"),
+    ):
+        assert await async_setup(hass, {}) is True
+
+    paths = hass.http.async_register_static_paths.await_args.args[0]
+    by_url = {p.url_path: p for p in paths}
+    assert "/lightener/lightener-curve-card.2.15.0.js" in by_url
+    # The "+" must not leak into any registered URL — '+' is reserved in URL paths.
+    assert not any("+" in k for k in by_url)
 
 
 async def test_async_setup_continues_when_static_path_registration_fails(
