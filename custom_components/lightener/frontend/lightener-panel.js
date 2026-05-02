@@ -142,8 +142,11 @@ class LightenerEditorPanel extends HTMLElement {
       return;
     }
     if (!this._cardScriptPromise) {
-      const moduleUrl = CARD_VERSION
-        ? `/lightener/lightener-curve-card.${CARD_VERSION}.js`
+      // Strip SemVer build metadata (e.g. +build.4) — the server registers the
+      // path without the + segment because + is reserved in URL paths.
+      const cardUrlVersion = CARD_VERSION ? CARD_VERSION.split("+")[0] : "";
+      const moduleUrl = cardUrlVersion
+        ? `/lightener/lightener-curve-card.${cardUrlVersion}.js`
         : "/lightener/lightener-curve-card.js";
       this._cardModuleUrl = moduleUrl;
       const fallbackUrl = "/lightener/lightener-curve-card.js";
