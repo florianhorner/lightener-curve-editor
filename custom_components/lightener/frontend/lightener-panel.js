@@ -241,8 +241,19 @@ class LightenerEditorPanel extends HTMLElement {
     this._cardDirty = false;
     this._pendingEntity = null;
     await this._loadLightenerEntities();
-    const entities = this._getEditorEntities();
-    const next = entities.find((e) => e.entity_id !== deletedEntityId) || null;
+    // Restrict post-delete selection to confirmed Lightener entities. Reading
+    // _lightenerEntities directly avoids _getEditorEntities()'s fallback path,
+    // which returns any HA light group when the Lightener list is empty —
+    // selecting one of those would point the card at an entity the
+    // integration doesn't own and produce an invalid editing state.
+    // If _requestedConfigEntryId is set (scoped panel) we still need that
+    // filter applied; _getEditorEntities() handles that case correctly.
+    const candidates = this._requestedConfigEntryId
+      ? this._getEditorEntities()
+      : Array.isArray(this._lightenerEntities)
+        ? this._lightenerEntities
+        : [];
+    const next = candidates.find((e) => e.entity_id !== deletedEntityId) || null;
     this._setSelectedEntity(next ? next.entity_id : null);
   }
 
