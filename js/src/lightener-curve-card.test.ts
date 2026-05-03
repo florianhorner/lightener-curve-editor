@@ -273,3 +273,66 @@ describe('lightener-curve-card — light management', () => {
     expect(legend.closeAddSignal).toBeGreaterThan(0);
   });
 });
+
+describe('lightener-curve-card — save flow', () => {
+  it('_onSave dispatches lightener/save_curves with the current curves payload', async () => {
+    const { card, hass } = await mountCard({
+      'light.a': { brightness: { '100': '100' } },
+    });
+    hass.callWS.mockReset();
+    hass.callWS.mockResolvedValueOnce(undefined); // save_curves response
+    hass.callWS.mockResolvedValueOnce({
+      entities: { 'light.a': { brightness: { '100': '100' } } },
+    }); // post-save reload
+
+    // Force dirty state by mutating the in-memory curves through the test escape hatch.
+    // Production code never exposes a setter; tests reach the @state field directly
+    // because exposing it on the public API just for tests would leak internals.
+    const internal = card as unknown as {
+      _curves: { entityId: string; controlPoints: { lightener: number; target: number }[] }[];
+      _onSave: () => Promise<void>;
+    };
+    internal._curves = internal._curves.map((c) => ({
+      ...c,
+      controlPoints: [...c.controlPoints, { lightener: 75, target: 90 }],
+    }));
+
+    await internal._onSave();
+
+    const saveCall = hass.callWS.mock.calls.find(
+      (c) => (c[0] as Record<string, unknown>)?.type === 'lightener/save_curves'
+    );
+    expect(saveCall).toBeDefined();
+    const msg = saveCall![0] as { entity_id: string; curves: Record<string, unknown> };
+    expect(msg.entity_id).toBe('light.lightener');
+    expect(msg.curves).toBeDefined();
+    expect(Object.keys(msg.curves)).toContain('light.a');
+  });
+
+  it('_onSave clears _saving and surfaces _saveError when the WS save rejects', async () => {
+    const { card, hass } = await mountCard({
+      'light.a': { brightness: { '100': '100' } },
+    });
+    hass.callWS.mockReset();
+    hass.callWS.mockRejectedValueOnce(new Error('ws transport failed'));
+
+    const internal = card as unknown as {
+      _curves: { entityId: string; controlPoints: { lightener: number; target: number }[] }[];
+      _onSave: () => Promise<void>;
+      _saving: boolean;
+      _saveError: string | null;
+    };
+    internal._curves = internal._curves.map((c) => ({
+      ...c,
+      controlPoints: [...c.controlPoints, { lightener: 80, target: 95 }],
+    }));
+
+    await internal._onSave();
+    await card.updateComplete;
+
+    // The card MUST recover: a stuck _saving=true freezes the save button
+    // until the user reloads the panel.
+    expect(internal._saving).toBe(false);
+    expect(internal._saveError).not.toBeNull();
+  });
+});
