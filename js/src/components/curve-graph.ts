@@ -915,9 +915,10 @@ export class CurveGraph extends LitElement {
                 >Add a light below to get started</text>`;
           }
           if (this.selectedCurveId === null && this._dragCurveIdx < 0) {
+            const gestureWord = this._isMobile ? 'double-tap' : 'double-click';
             const hintText = this._graphHintDismissed
               ? 'Select a light to edit its curve'
-              : 'Select a light, then click its curve to add a control point';
+              : `Select a light, then ${gestureWord} its curve to add a control point`;
             return svg`<text class="hint hint-select" text-anchor="middle"
                 x="${PAD_LEFT + GRAPH_W / 2}" y="${PAD_TOP + GRAPH_H / 2}"
                 >${hintText}</text>`;

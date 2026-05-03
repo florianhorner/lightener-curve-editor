@@ -302,7 +302,9 @@ describe('curve-graph first-time hint', () => {
     await graph.updateComplete;
     const hint = graph.shadowRoot!.querySelector<SVGTextElement>('.hint-select')!;
     expect(hint).not.toBeNull();
-    expect(hint.textContent).toBe('Select a light, then click its curve to add a control point');
+    expect(hint.textContent).toBe(
+      'Select a light, then double-click its curve to add a control point'
+    );
   });
 
   it('falls back to the short hint after the user has interacted in the current entity session', async () => {
@@ -329,7 +331,7 @@ describe('curve-graph first-time hint', () => {
     graph.entityId = 'light.lightener_b';
     await graph.updateComplete;
     expect(graph.shadowRoot!.querySelector<SVGTextElement>('.hint-select')!.textContent).toBe(
-      'Select a light, then click its curve to add a control point'
+      'Select a light, then double-click its curve to add a control point'
     );
   });
 });

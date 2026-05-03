@@ -794,6 +794,7 @@ export class CurveLegend extends LitElement {
 
   private _startAdd() {
     this._confirmingRemove = null;
+    this._confirmingDeleteGroup = false;
     this._addingLight = true;
     this._pendingAddEntity = '';
     this._pendingPreset = this.presetOptions[0]?.value ?? 'linear';

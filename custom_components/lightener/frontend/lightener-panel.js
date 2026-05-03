@@ -930,7 +930,7 @@ class LightenerEditorPanel extends HTMLElement {
         this._openCreateGroupModal();
       });
       this.shadowRoot.querySelector("#cgf-cancel").addEventListener("click", () => {
-        this._closeCreateGroupModal();
+        if (!this._createGroupSubmitting) this._closeCreateGroupModal();
       });
       this.shadowRoot.querySelector("#create-group-backdrop").addEventListener("click", () => {
         if (!this._createGroupSubmitting) this._closeCreateGroupModal();
@@ -978,6 +978,7 @@ class LightenerEditorPanel extends HTMLElement {
   }
 
   _openCreateGroupModal() {
+    if (this._createGroupSubmitting) return;
     const modal = this.shadowRoot.querySelector("#create-group-modal");
     if (!modal) return;
     this._createGroupSubmitting = false;
@@ -1115,6 +1116,7 @@ class LightenerEditorPanel extends HTMLElement {
     const nameInput = this.shadowRoot.querySelector("#cgf-name");
     const errorEl = this.shadowRoot.querySelector("#create-group-error");
     const submitBtn = this.shadowRoot.querySelector("#cgf-submit");
+    const cancelBtn = this.shadowRoot.querySelector("#cgf-cancel");
     const name = (nameInput?.value || "").trim();
     if (!name || this._createGroupSelectedLights.length === 0) {
       this._createGroupSubmitting = false;
@@ -1124,6 +1126,7 @@ class LightenerEditorPanel extends HTMLElement {
     errorEl.hidden = true;
     errorEl.textContent = "";
     submitBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = true;
     submitBtn.textContent = "Creating…";
 
     let flowId = null;
@@ -1172,13 +1175,11 @@ class LightenerEditorPanel extends HTMLElement {
       this._closeCreateGroupModal();
       await this._loadLightenerEntities();
       const newEntities = this._getEditorEntities();
-      const expectedTitle = step.title || name;
-      const newEntity =
-        newEntities.find((e) => e.name === expectedTitle) ||
-        newEntities[newEntities.length - 1];
-      if (newEntity) {
-        this._setSelectedEntity(newEntity.entity_id);
-      }
+      const newEntryId = step.result?.entry_id;
+      const newEntity = newEntryId ? newEntities.find((e) => e.config_entry_id === newEntryId) : null;
+      const fallback = newEntities.find((e) => e.name === (step.title || name)) || newEntities[newEntities.length - 1];
+      const selected = newEntity || fallback;
+      if (selected) this._setSelectedEntity(selected.entity_id);
     } catch (err) {
       console.error("[Lightener] Create group failed:", err);
       errorEl.textContent = err?.message || "Couldn't create group — try again.";
@@ -1197,6 +1198,7 @@ class LightenerEditorPanel extends HTMLElement {
     } finally {
       this._createGroupSubmitting = false;
       submitBtn.disabled = false;
+      if (cancelBtn) cancelBtn.disabled = false;
       submitBtn.textContent = "Create group";
       this._setCreateGroupSubmitDisabled();
     }

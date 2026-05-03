@@ -1333,7 +1333,10 @@ export class LightenerCurveCard extends LitElement {
       const reg = (await this._hass.callWS({
         type: 'config/entity_registry/get',
         entity_id: entityId,
-      })) as { config_entry_id?: string | null } | null;
+      })) as { config_entry_id?: string | null; platform?: string } | null;
+      if (reg?.platform !== 'lightener') {
+        throw new Error('Entity is not a Lightener group — cannot delete from this card.');
+      }
       const configEntryId = reg?.config_entry_id;
       if (!configEntryId) {
         throw new Error('Group is not backed by a config entry — cannot delete from the card.');
