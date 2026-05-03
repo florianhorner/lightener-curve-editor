@@ -302,10 +302,10 @@ function t(t,e,i,r){var n,s=arguments.length,o=s<3?e:null===r?r=Object.getOwnPro
         font-size: 12px;
       }
       .hint {
-        font-size: 12px;
+        font-size: 14px;
       }
       .editing-label {
-        font-size: 12px;
+        font-size: 14px;
       }
       .tooltip-text {
         font-size: 11px;
@@ -549,7 +549,7 @@ function t(t,e,i,r){var n,s=arguments.length,o=s<3?e:null===r?r=Object.getOwnPro
         font-size: 12px;
       }
       .scrubber-label {
-        font-size: 11px;
+        font-size: 13px;
       }
       .preview-toggle-btn {
         font-size: 11px;

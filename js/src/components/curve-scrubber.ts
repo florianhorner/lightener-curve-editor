@@ -195,7 +195,7 @@ export class CurveScrubber extends LitElement {
         font-size: 12px;
       }
       .scrubber-label {
-        font-size: 11px;
+        font-size: 13px;
       }
       .preview-toggle-btn {
         font-size: 11px;
