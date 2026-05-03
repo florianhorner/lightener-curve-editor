@@ -1011,6 +1011,10 @@ class LightenerEditorPanel extends HTMLElement {
     if (this._createGroupSubmitting) return;
     const modal = this.shadowRoot.querySelector("#create-group-modal");
     if (!modal) return;
+    // Bump the open-cycle token so any in-flight async picker render from a
+    // prior open is rejected before it can append a stale picker into this
+    // session's mount.
+    this._createGroupOpenToken = (this._createGroupOpenToken || 0) + 1;
     this._createGroupSubmitting = false;
     this._createGroupSelectedPreset = "linear";
     this._createGroupSelectedLights = [];
@@ -1020,7 +1024,7 @@ class LightenerEditorPanel extends HTMLElement {
     errorEl.hidden = true;
     errorEl.textContent = "";
     this._renderCreateGroupPresets();
-    this._renderCreateGroupLightsPicker();
+    this._renderCreateGroupLightsPicker(this._createGroupOpenToken);
     this._setCreateGroupSubmitDisabled();
     modal.hidden = false;
     setTimeout(() => nameInput.focus(), 0);
@@ -1061,13 +1065,24 @@ class LightenerEditorPanel extends HTMLElement {
     });
   }
 
-  async _renderCreateGroupLightsPicker() {
+  async _renderCreateGroupLightsPicker(openToken = this._createGroupOpenToken) {
     const mount = this.shadowRoot.querySelector("#cgf-lights-mount");
     if (!mount) return;
     mount.innerHTML = "";
     await this._ensureEntityPickerLoaded();
-    // If the modal was closed during the warm-up, bail out.
-    if (!this.shadowRoot.querySelector("#cgf-lights-mount")) return;
+    // The mount stays in the DOM while the modal is hidden, so checking its
+    // existence is not enough to detect a close-and-reopen during the warm-up.
+    // Reject this render if the open-cycle token has moved on or the modal
+    // is no longer visible.
+    const modal = this.shadowRoot.querySelector("#create-group-modal");
+    if (
+      openToken !== this._createGroupOpenToken ||
+      !this.shadowRoot.querySelector("#cgf-lights-mount") ||
+      !modal ||
+      modal.hidden
+    ) {
+      return;
+    }
     let picker;
     if (customElements.get("ha-entity-picker")) {
       picker = document.createElement("ha-entity-picker");
@@ -1194,7 +1209,11 @@ class LightenerEditorPanel extends HTMLElement {
     const submitBtn = this.shadowRoot.querySelector("#cgf-submit");
     const cancelBtn = this.shadowRoot.querySelector("#cgf-cancel");
     const name = (nameInput?.value || "").trim();
-    if (!name || this._createGroupSelectedLights.length === 0) {
+    // Snapshot mutable modal state before any awaits — the user can keep
+    // editing lights/preset chips while the WS calls are in flight.
+    const selectedLights = [...this._createGroupSelectedLights];
+    const selectedPreset = this._createGroupSelectedPreset || "linear";
+    if (!name || selectedLights.length === 0) {
       this._createGroupSubmitting = false;
       return;
     }
@@ -1236,8 +1255,8 @@ class LightenerEditorPanel extends HTMLElement {
         type: "config_entries/flow/configure",
         flow_id: flowId,
         user_input: {
-          controlled_entities: this._createGroupSelectedLights,
-          curve_preset: this._createGroupSelectedPreset || "linear",
+          controlled_entities: selectedLights,
+          curve_preset: selectedPreset,
         },
       });
 

@@ -1355,14 +1355,19 @@ export class LightenerCurveCard extends LitElement {
       // clear our own state immediately. The panel handles its own teardown
       // via _handleGroupDeleted, which navigates away — these resets are
       // harmless there.
+      // Do NOT set _loadError here: the existing render path treats any
+      // truthy _loadError as a "Failed to load curves" alert with a Retry
+      // button, which would misrepresent a successful delete as a failure.
+      // Clearing _curves and marking the card loaded yields the empty
+      // curve-grid render, which is the correct post-delete view.
       this._curves = [];
       this._originalCurves = [];
       this._undoStack = [];
-      this._loaded = false;
-      this._loadedEntityId = undefined;
+      this._loaded = true;
+      this._loadedEntityId = entityId;
       this._selectedCurveId = null;
-      this._loadError = 'This Lightener group was deleted.';
-      this._loadErrorEntityId = entityId;
+      this._loadError = null;
+      this._loadErrorEntityId = undefined;
       this.dispatchEvent(
         new CustomEvent('lightener-group-deleted', {
           detail: { entityId, configEntryId },
