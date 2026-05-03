@@ -40,6 +40,9 @@ export class CurveGraph extends LitElement {
     if (changed.has('entityId')) {
       this._graphHintDismissed = false;
     }
+    if (changed.has('selectedCurveId') && this.selectedCurveId !== null) {
+      this._graphHintDismissed = true;
+    }
   }
 
   private readonly _uid = Math.random().toString(36).slice(2, 7);

@@ -1345,6 +1345,12 @@ export class LightenerCurveCard extends LitElement {
         type: 'config_entries/remove',
         entry_id: configEntryId,
       });
+      // Reset manage mode locally before the handoff. The panel auto-selects
+      // another group on this event — if _manageMode survives the switch, the
+      // next group opens already showing remove/delete affordances.
+      this._manageMode = false;
+      this._legendCloseAddSignal++;
+      this._legendCloseRemoveSignal++;
       // Standalone Lovelace card: no parent panel listens for the event, so
       // clear our own state immediately. The panel handles its own teardown
       // via _handleGroupDeleted, which navigates away — these resets are

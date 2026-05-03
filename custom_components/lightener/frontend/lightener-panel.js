@@ -1255,7 +1255,17 @@ class LightenerEditorPanel extends HTMLElement {
       const newEntity = newEntryId ? newEntities.find((e) => e.config_entry_id === newEntryId) : null;
       const fallback = newEntities.find((e) => e.name === (step.title || name)) || newEntities[newEntities.length - 1];
       const selected = newEntity || fallback;
-      if (selected) this._setSelectedEntity(selected.entity_id);
+      if (selected) {
+        // If the current card has unsaved curve edits, route the switch through
+        // the pending-switch flow so the user gets the save/discard guard.
+        // Otherwise switch immediately.
+        if (this._cardDirty && this._selectedEntity && selected.entity_id !== this._selectedEntity) {
+          this._pendingEntity = selected.entity_id;
+          this._renderPendingSwitch();
+        } else {
+          this._setSelectedEntity(selected.entity_id);
+        }
+      }
     } catch (err) {
       console.error("[Lightener] Create group failed:", err);
       errorEl.textContent = err?.message || "Couldn't create group — try again.";
