@@ -183,7 +183,7 @@ export class CurveLegend extends LitElement {
       width: 16px;
       height: 16px;
       flex-shrink: 0;
-      opacity: 0;
+      opacity: 0.7;
       transition:
         opacity 0.15s ease,
         color 0.15s ease;
@@ -197,13 +197,15 @@ export class CurveLegend extends LitElement {
       align-items: center;
       justify-content: center;
     }
-    .legend-item:hover .remove-icon,
-    .legend-item:focus-within .remove-icon {
-      opacity: 0.7;
-    }
     .remove-icon:hover {
-      opacity: 1 !important;
+      opacity: 1;
       color: var(--error-color, #db4437);
+    }
+    /* Selected row is the active editing target — hide the trash to keep the
+       row readable on mobile and avoid mis-tapping while editing. Deselect
+       first (click the X), then delete. */
+    .legend-item.selected .remove-icon {
+      display: none;
     }
     .remove-icon:focus {
       outline: none;
@@ -391,7 +393,8 @@ export class CurveLegend extends LitElement {
       background: transparent;
       border: none;
       color: var(--error-color, #db4437);
-      padding: 6px 0;
+      min-height: 44px;
+      padding: 10px 0;
       text-align: left;
       width: 100%;
     }
