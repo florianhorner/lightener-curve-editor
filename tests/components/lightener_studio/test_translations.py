@@ -85,3 +85,18 @@ def test_translation_placeholders_match_english() -> None:
                 )
 
     assert failures == []
+
+
+def test_disabled_entity_error_exists_for_config_and_options() -> None:
+    """Every locale exposes the shared disabled-membership recovery code."""
+    translations = _load_translation_strings()
+    required = {
+        "config.error.disabled_entity",
+        "options.error.disabled_entity",
+    }
+
+    assert {
+        locale: sorted(required - set(strings))
+        for locale, strings in translations.items()
+        if required - set(strings)
+    } == {}

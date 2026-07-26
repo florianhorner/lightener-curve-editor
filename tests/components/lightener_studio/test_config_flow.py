@@ -1,7 +1,7 @@
 """Tests for config_flow."""
 
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -10,6 +10,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_BRIGHTNESS, CONF_ENTITIES, CONF_FRIENDLY_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult, InvalidData
+from homeassistant.helpers.entity_registry import RegistryEntryDisabler
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -160,6 +161,29 @@ async def test_config_flow_multiple_lights(hass: HomeAssistant) -> None:
             "light.test2": {CONF_BRIGHTNESS: dict(DEFAULT_BRIGHTNESS)},
         },
     }
+
+
+async def test_config_flow_rejects_new_disabled_light(hass: HomeAssistant) -> None:
+    """A direct config-flow submission cannot add a disabled entity."""
+    async_get_entity_registry(hass).async_update_entity(
+        "light.test2", disabled_by=RegistryEntryDisabler.USER
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        const.DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={"name": "Disabled"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={"controlled_entities": ["light.test2"]},
+    )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "lights"
+    assert result["errors"]["base"] == "disabled_entity"
+    assert hass.config_entries.async_entries(const.DOMAIN) == []
 
 
 async def test_config_flow_handoff_to_editor(hass: HomeAssistant) -> None:
@@ -365,6 +389,81 @@ async def test_options_flow_assigns_default_curve_to_new_lights(
         "light.test1": {CONF_BRIGHTNESS: {"10": "20", "80": "90"}},
         "light.test2": {CONF_BRIGHTNESS: dict(DEFAULT_BRIGHTNESS)},
     }
+
+
+async def test_options_flow_rejects_light_disabled_after_form_load(
+    hass: HomeAssistant,
+) -> None:
+    """Options re-check registry state at commit and preserve entry data."""
+    original_data = {
+        CONF_ENTITIES: {
+            "light.test1": {CONF_BRIGHTNESS: {"10": "20", "80": "90"}},
+        }
+    }
+    entry = MockConfigEntry(
+        domain="lightener_studio",
+        version=LightenerConfigFlow.VERSION,
+        unique_id=str(uuid4()),
+        data=original_data,
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    async_get_entity_registry(hass).async_update_entity(
+        "light.test2", disabled_by=RegistryEntryDisabler.USER
+    )
+
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock
+    ) as reload_entry:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"controlled_entities": ["light.test1", "light.test2"]},
+        )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "init"
+    assert result["errors"]["base"] == "disabled_entity"
+    assert dict(entry.data) == original_data
+    reload_entry.assert_not_awaited()
+
+
+async def test_options_flow_retains_initially_disabled_light(
+    hass: HomeAssistant,
+) -> None:
+    """An already-persisted disabled entity remains valid in options."""
+    original_data = {
+        CONF_ENTITIES: {
+            "light.test1": {CONF_BRIGHTNESS: {"10": "20", "80": "90"}},
+            "light.test2": {CONF_BRIGHTNESS: {"30": "40"}},
+        }
+    }
+    entry = MockConfigEntry(
+        domain="lightener_studio",
+        version=LightenerConfigFlow.VERSION,
+        unique_id=str(uuid4()),
+        data=original_data,
+    )
+    entry.add_to_hass(hass)
+    async_get_entity_registry(hass).async_update_entity(
+        "light.test1", disabled_by=RegistryEntryDisabler.USER
+    )
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    with patch.object(
+        hass.config_entries,
+        "async_reload",
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as reload_entry:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"controlled_entities": ["light.test1", "light.test2"]},
+        )
+
+    assert result["type"] == "create_entry"
+    assert dict(entry.data) == original_data
+    reload_entry.assert_awaited_once_with(entry.entry_id)
 
 
 async def test_options_flow_rolls_back_when_reload_fails(

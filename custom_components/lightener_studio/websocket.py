@@ -11,9 +11,16 @@ from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 
-from .const import CURVE_PRESETS, DEFAULT_CURVE_PRESET, DOMAIN
+from .const import (
+    CANDIDATE_STATE_METADATA_CAPABILITY,
+    CANDIDATE_STATE_METADATA_VERSION,
+    CURVE_PRESETS,
+    DEFAULT_CURVE_PRESET,
+    DOMAIN,
+)
 from .entity_selection import eligible_controlled_light_entity_ids
 from .handoff import HandoffError, async_resolve_handoff
 from .membership import MembershipError, async_set_controlled_lights
@@ -549,15 +556,16 @@ def _resolve_lightener_entry(hass: HomeAssistant, entity_id: str):
 
 
 def _candidate_area(
-    hass: HomeAssistant, entity_id: str
+    registry_entry: RegistryEntry | None,
+    device_registry: dr.DeviceRegistry,
+    area_registry: ar.AreaRegistry,
 ) -> tuple[str | None, str | None]:
     """Return the effective area id and name for an entity."""
-    registry_entry = async_get_entity_registry(hass).async_get(entity_id)
     area_id = registry_entry.area_id if registry_entry is not None else None
     if area_id is None and registry_entry is not None and registry_entry.device_id:
-        device = dr.async_get(hass).async_get(registry_entry.device_id)
+        device = device_registry.async_get(registry_entry.device_id)
         area_id = device.area_id if device is not None else None
-    area = ar.async_get(hass).async_get_area(area_id) if area_id else None
+    area = area_registry.async_get_area(area_id) if area_id else None
     return area_id, area.name if area is not None else None
 
 
@@ -588,33 +596,52 @@ def ws_list_candidate_lights(
         return
 
     current_ids = list(config_entry.data.get("entities", {}))
+    current_id_set = set(current_ids)
     candidate_ids = sorted(
         set(eligible_controlled_light_entity_ids(hass)).union(current_ids)
     )
     entity_registry = async_get_entity_registry(hass)
+    device_registry = dr.async_get(hass)
+    area_registry = ar.async_get(hass)
     candidates = []
     for entity_id in candidate_ids:
         registry_entry = entity_registry.async_get(entity_id)
         state = hass.states.get(entity_id)
-        name = None
+        raw_name = None
         if state is not None:
-            name = state.attributes.get("friendly_name")
-        if not name and registry_entry is not None:
-            name = registry_entry.name or registry_entry.original_name
-        area_id, area_name = _candidate_area(hass, entity_id)
+            raw_name = state.attributes.get("friendly_name")
+        if (
+            not isinstance(raw_name, str) or not raw_name
+        ) and registry_entry is not None:
+            registry_name = registry_entry.name or registry_entry.original_name
+            raw_name = registry_name if isinstance(registry_name, str) else None
+        name = raw_name if isinstance(raw_name, str) and raw_name else entity_id
+        area_id, area_name = _candidate_area(
+            registry_entry, device_registry, area_registry
+        )
         candidates.append(
             {
                 "entity_id": entity_id,
-                "name": name or entity_id,
+                "name": name,
                 "available": state is not None and state.state != STATE_UNAVAILABLE,
                 "area_id": area_id,
                 "area_name": area_name,
+                "hidden": registry_entry is not None
+                and registry_entry.hidden_by is not None,
+                "disabled": registry_entry is not None
+                and registry_entry.disabled_by is not None,
+                "missing": entity_id in current_id_set
+                and registry_entry is None
+                and state is None,
             }
         )
 
     connection.send_result(
         msg["id"],
         {
+            "capabilities": {
+                CANDIDATE_STATE_METADATA_CAPABILITY: (CANDIDATE_STATE_METADATA_VERSION)
+            },
             "observed_controlled_entity_ids": current_ids,
             "lights": candidates,
         },
