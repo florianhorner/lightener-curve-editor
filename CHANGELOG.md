@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **Edit lights can now focus the list without hiding problems.** The picker keeps current members in a stable dialog-open group, adds `Current group only`, and puts hidden or disabled non-members behind an explicit disclosure. Hidden, disabled, missing, and unavailable states stay distinct, filters never change pending membership, and the dialog preserves work across retryable failures.
+
+### Fixed
+
+- **A disabled entity cannot be added through a stale or older client.** Candidate metadata is versioned and skew-safe, while the backend rechecks new members inside the membership lock and returns an actionable `disabled_entity` error without mutating the group. Existing disabled members remain retainable and removable.
+- **Edit lights now recovers without losing focus or showing contradictory status.** Failed candidate loads wait for an explicit retry, disappearing or disabled-only results restore focus inside the dialog, exceptional counts follow the active discovery view, and save or membership confirmations replace each other instead of stacking.
+
 ## [2.17.2] - 2026-07-18
 
 ### Fixed
