@@ -2,12 +2,13 @@
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-import pytest
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar
@@ -27,6 +28,7 @@ from custom_components.lightener_studio.const import (
 from custom_components.lightener_studio.membership import (
     MembershipUpdate,
     _membership_lock,
+    async_set_controlled_lights,
     validate_membership_selection,
 )
 
@@ -38,6 +40,19 @@ DISABLED_ENTITY_ERROR = CANDIDATE_CONTRACT["errors"]["disabled_entity"]
 DISABLED_ENTITY_MESSAGE = DISABLED_ENTITY_ERROR["message_template"].replace(
     "{entity_id}", "light.test2"
 )
+
+
+def _membership_update_barrier() -> tuple[
+    asyncio.Event, Callable[..., Awaitable[MembershipUpdate]]
+]:
+    """Signal when a websocket handler reaches the membership transaction."""
+    entered = asyncio.Event()
+
+    async def instrumented_update(*args: Any, **kwargs: Any) -> MembershipUpdate:
+        entered.set()
+        return await async_set_controlled_lights(*args, **kwargs)
+
+    return entered, instrumented_update
 
 
 async def _setup_lightener(hass: HomeAssistant, entities: dict) -> MockConfigEntry:
@@ -605,10 +620,17 @@ async def test_batch_rechecks_disabled_state_after_waiting_for_lock(
     )
     ws = await hass_ws_client(hass)
     lock = _membership_lock(hass, entry.entry_id)
+    queued, instrumented_update = _membership_update_barrier()
 
-    with patch.object(
-        hass.config_entries, "async_reload", new_callable=AsyncMock
-    ) as reload_entry:
+    with (
+        patch.object(
+            hass.config_entries, "async_reload", new_callable=AsyncMock
+        ) as reload_entry,
+        patch(
+            "custom_components.lightener_studio.websocket.async_set_controlled_lights",
+            new=instrumented_update,
+        ),
+    ):
         await lock.acquire()
         try:
             await ws.send_json(
@@ -620,12 +642,7 @@ async def test_batch_rechecks_disabled_state_after_waiting_for_lock(
                     "controlled_entity_ids": ["light.test1", "light.test2"],
                 }
             )
-            for _ in range(200):
-                if lock._waiters:
-                    break
-                await asyncio.sleep(0)
-            else:  # pragma: no cover - defensive
-                pytest.fail("set_controlled_lights never queued on the membership lock")
+            await asyncio.wait_for(queued.wait(), timeout=5)
 
             async_get_entity_registry(hass).async_update_entity(
                 "light.test2", disabled_by=RegistryEntryDisabler.USER
@@ -693,12 +710,19 @@ async def test_add_light_rejects_membership_that_changed_while_queued(
     )
     ws = await hass_ws_client(hass)
     lock = _membership_lock(hass, entry.entry_id)
+    queued, instrumented_update = _membership_update_barrier()
 
-    with patch.object(
-        hass.config_entries,
-        "async_reload",
-        new_callable=AsyncMock,
-        return_value=True,
+    with (
+        patch.object(
+            hass.config_entries,
+            "async_reload",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch(
+            "custom_components.lightener_studio.websocket.async_set_controlled_lights",
+            new=instrumented_update,
+        ),
     ):
         # Hold the membership lock so the add handler snapshots current members
         # and then parks on the lock, exactly like a real op queued behind a
@@ -713,12 +737,7 @@ async def test_add_light_rejects_membership_that_changed_while_queued(
                     "controlled_entity_id": "light.new",
                 }
             )
-            for _ in range(200):
-                if lock._waiters:
-                    break
-                await asyncio.sleep(0)
-            else:  # pragma: no cover - defensive
-                pytest.fail("add_light never queued on the membership lock")
+            await asyncio.wait_for(queued.wait(), timeout=5)
 
             # Simulate a concurrent commit landing while the add was queued.
             hass.config_entries.async_update_entry(
