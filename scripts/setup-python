@@ -6,8 +6,9 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
     cat <<'EOF'
 Usage: scripts/setup-python
 
-Create the local Python 3.13 virtualenv at .venv, install backend
-dependencies, write .env.workspace, and install pre-commit hooks.
+Create the local Python 3.13 virtualenv at .venv, install backend test and
+isolated-Home-Assistant runtime dependencies, write .env.workspace, and
+install pre-commit hooks.
 
 Run once after cloning, or whenever Python requirements files change.
 EOF
@@ -53,6 +54,9 @@ echo "[setup-python] Installing dependencies..."
 # test stack; requirements.txt installs second to override pytest to its own pin.
 uv pip install --python .venv/bin/python -r requirements-ha-test.txt
 uv pip install --python .venv/bin/python -r requirements.txt
+CC=gcc CXX=g++ uv pip install \
+    --python .venv/bin/python \
+    -r requirements-ha-runtime.txt
 
 # Fail loud if the override didn't take (e.g. the two installs were reordered).
 expected_pytest="$(grep -oE '^pytest==[0-9.]+' requirements.txt | cut -d= -f3 || true)"

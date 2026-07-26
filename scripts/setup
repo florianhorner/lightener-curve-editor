@@ -32,6 +32,18 @@ apt-get install -y --no-install-recommends \
 	autoconf
 
 # HA-like optional libs (safe to install; used by some integrations/tests)
+LIGHTENER_TURBOJPEG_PACKAGE=""
+for candidate in libturbojpeg libturbojpeg0; do
+	if apt-get install --simulate --no-install-recommends "${candidate}" >/dev/null 2>&1; then
+		LIGHTENER_TURBOJPEG_PACKAGE="${candidate}"
+		break
+	fi
+done
+if [[ -z "${LIGHTENER_TURBOJPEG_PACKAGE}" ]]; then
+	echo "[setup] ERROR: no supported libturbojpeg package found." >&2
+	exit 1
+fi
+
 apt-get install -y --no-install-recommends \
 	bluez \
 	ffmpeg \
@@ -45,7 +57,7 @@ apt-get install -y --no-install-recommends \
 	libswresample-dev \
 	libavfilter-dev \
 	libpcap-dev \
-	libturbojpeg0 \
+	"${LIGHTENER_TURBOJPEG_PACKAGE}" \
 	libyaml-dev \
 	libxml2
 

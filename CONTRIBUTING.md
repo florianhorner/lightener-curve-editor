@@ -14,7 +14,8 @@ Contributing to this project should be as easy and transparent as possible, whet
 3. If you changed any `js/src` file, run `cd js && npm run build` and commit the
    regenerated bundles in `custom_components/lightener_studio/frontend/` and `docs/` —
    the version-sync CI job fails if the committed bundle drifts from source.
-4. Run `scripts/preflight` (mirrors the CI gate) and fix what it flags.
+4. Run `scripts/preflight` (the local preflight subset) and fix what it flags.
+   Playwright and the full coverage jobs remain separate CI gates.
 5. Update the changelog if the change is user-facing.
 6. Open a pull request — every PR needs a `## Proof` block in its body; the
    template fills one in (see [Pull requests](#pull-requests)).
@@ -58,7 +59,7 @@ custom_components/lightener_studio/   # Python — HA integration backend
   light.py                     # Virtual light platform (re-exports brightness helpers)
   observability.py             # Structured logging / tracing / metrics
   util.py                      # Small cross-cutting helpers
-  websocket.py                 # WebSocket API (get_curves / save_curves / list_entities / remove_light)
+  websocket.py                 # WebSocket API (curves, candidate lights, batch/legacy membership, handoff)
   translations/                # HA config/options flow + Repair issue strings (en, de, sk, pt-BR)
   frontend/                    # Built JS bundle (committed, do not edit by hand)
   brand/                       # HACS integration icons (icon.png, logo.png)
@@ -68,6 +69,7 @@ js/                            # TypeScript — Lit 3.x frontend card
     lightener-curve-card.ts    # Main card component
     components/                # Sub-components (graph, legend, scrubber, footer)
     utils/                     # Data helpers, curve math, presets, save-lifecycle reducer, types
+  playwright/                  # Built-bundle browser, membership, responsive, and skew proof
   scripts/scenecast/           # Demo-capture engine (runner.mjs, capture.html, integration tests)
   scenes/                      # Per-project Scenecast choreography (lightener.scene.mjs)
 
@@ -87,7 +89,8 @@ tests/                         # pytest — backend unit tests
   intentionally target py312 for tooling compatibility — that 3.13-vs-3.12 split is
   expected, not a mismatch.
 - Node.js 20+
-- A running Home Assistant dev instance (or the included Dev Container)
+- Home Assistant is optional for unit and browser work. Use the isolated
+  `scripts/develop` instance only for the explicit live-proof lane.
 
 ## Setting up
 
@@ -106,7 +109,7 @@ source .env.workspace
 
 # Frontend
 cd js
-npm install
+npm ci
 ```
 
 Do not use bare `pytest` for local backend work. This repository standardizes on
@@ -114,6 +117,91 @@ Do not use bare `pytest` for local backend work. This repository standardizes on
 the repo-managed Python 3.13 `.venv`. A global `pytest` can resolve to a stale
 install and fail before test collection starts. If you `source .env.workspace`
 first, the shell also gets a `pytest()` wrapper that routes to the same venv.
+
+## First ten minutes: membership picker
+
+The candidate contract and dialog can be developed without running Home
+Assistant. Start with the reproducible install and the smallest red/green loops:
+
+```sh
+# Cold bootstrap.
+scripts/setup-python
+(cd js && npm ci)
+
+# Backend contract, write authority, config-flow errors, and locale parity.
+scripts/test-python \
+  tests/components/lightener_studio/test_membership.py \
+  tests/components/lightener_studio/test_config_flow.py \
+  tests/components/lightener_studio/test_translations.py -q
+
+# Dialog normalization, filters, lifecycle, and recovery.
+(cd js && npm test -- src/components/light-membership-dialog.test.ts)
+
+# Built-bundle browser contract, including the actual prior-stable skew cell.
+(cd js && npm run build && npx playwright test membership-picker.spec.ts)
+```
+
+A successful targeted loop exits zero: pytest and Vitest report their selected
+tests as passed, and Playwright reports `membership-picker.spec.ts` with no
+failures. The browser command builds the current bundle first; do not treat a
+test against an older committed bundle as current-source proof.
+
+For planning and regression reports, record the measured duration rather than
+claiming an unmeasured setup time. The working targets are:
+
+| Loop | Target |
+|---|---:|
+| Clean checkout to first targeted green | p50 ≤ 15 minutes; p90 ≤ 25 minutes |
+| Warm backend or frontend edit to relevant result | ≤ 3 minutes |
+| Warm checkout to complete isolated #220 live proof | ≤ 20 minutes |
+
+Run `scripts/test-fast` after the targeted loops. Before handoff, also run the
+local preflight subset, the browser suite, and the relevant coverage jobs; none
+of the targeted commands alone is the full acceptance gate.
+
+### Optional isolated Home Assistant proof
+
+Use this only when the source-level and built-bundle loops are green. It starts
+the repository's disposable Home Assistant, not a real installation, and it
+does not authorize a restart elsewhere.
+
+`scripts/setup-python` installs the dedicated `requirements-ha-runtime.txt`
+pins needed by Home Assistant's web UI. On macOS, install the native
+`jpeg-turbo` library with `brew install jpeg-turbo`; `scripts/develop`
+automatically exposes its Homebrew library path. On Debian/Ubuntu,
+`sudo scripts/setup` selects the available `libturbojpeg` package
+(`libturbojpeg` on Ubuntu Noble, `libturbojpeg0` on older releases). If the UI
+still hangs on **Loading data**, stop the isolated process and search its log
+for `ModuleNotFoundError` or `handle_get_services` before debugging Lightener.
+
+```sh
+scripts/develop --fresh
+```
+
+`--fresh` clears only this repository's persisted dev configuration. Complete
+onboarding if prompted, then create a disposable group named
+`Membership Proof` with:
+
+- `light.living_room_ceiling` (`Living Room Ceiling Lights`)
+- `light.living_room_sofa_lamp` (`Living Room Sofa Lamp`)
+
+In `/lightener-editor`, open **Edit lights** and record:
+
+1. **Current group only (2)** remains based on the dialog-open membership even
+   after one current row is unchecked.
+2. **Show hidden & disabled (N)** reveals exceptional rows without making a
+   disabled new row selectable.
+3. Adding `light.living_room_ceiling_leds`, updating, and reloading preserves
+   member order and saved curves.
+4. For the race guard, select a new light, disable it from Home Assistant's
+   Entities page before Update, and verify `disabled_entity` keeps pending
+   selection and filters, focuses the recovery, and offers **Try again**.
+
+Stop the isolated process with Ctrl-C. Stage raw screenshots, logs, payloads,
+timings, and the exact integration/Home Assistant/frontend/browser versions
+under `.context/proof/` while working. That directory is ignored and is not a
+review artifact: sanitize and upload the selected evidence to the pull request
+or CI, or commit a purpose-built fixture before asking for review.
 
 ## Fast loop
 
@@ -126,11 +214,11 @@ scripts/test-fast
 That runs the fast checks we expect before touching a real Home Assistant box:
 backend pytest, frontend vitest, and frontend typecheck.
 
-**Before opening a PR, run `scripts/preflight`.** It mirrors the full CI gate —
-ruff, mypy, pytest, ESLint, Prettier, tsc, vitest, the frontend build + demo
-check, and the attribution/dependabot guards — so a formatting nit or a stale
-committed bundle fails on your machine instead of in CI. (`scripts/test-fast`
-deliberately skips ESLint, Prettier, and the build; CI runs them.)
+**Before opening a PR, run `scripts/preflight`.** It is the local preflight
+subset: ruff, mypy, pytest, ESLint, Prettier, tsc, Vitest, the frontend build
+and demo check, plus repository guards. It deliberately excludes Playwright,
+the full coverage jobs, hassfest, and HACS validation, which remain separate CI
+gates. (`scripts/test-fast` also skips ESLint, Prettier, and the build.)
 
 If you want to test on a live Home Assistant instance without cutting a release
 or waiting for HACS, sync the integration directly over SSH:
@@ -210,8 +298,8 @@ pre-commit install
 
 ### Browser regression tests (Playwright)
 
-The Playwright suite guards against horizontal overflow and layout
-regressions across the three rendering surfaces the card supports.
+The Playwright suite drives the committed browser bundle. It guards the three
+card rendering surfaces and the focused membership-picker contract.
 
 ```sh
 cd js
@@ -221,8 +309,8 @@ npm run test:browser   # builds the bundle, then runs playwright
 `npm run test:browser` is the recommended entry point — it runs `npm run build`
 first so the test always uses the current source, not a stale bundle.
 
-**Test matrix:** 12 tests — 3 surfaces × 4 viewport widths (320 / 500 / 700 /
-1100 px).
+The overflow matrix covers 3 surfaces × 4 viewport widths (320 / 500 / 700 /
+1100 px):
 
 | Surface | How it renders |
 |---|---|
@@ -258,6 +346,40 @@ The fixture uses 20 lights with 46-character entity IDs and friendly names to
 stress-test text truncation and overflow. If you add a new rendering surface,
 add a `FixtureMode` variant to the spec and a corresponding branch in the
 fixture's `__LIGHTENER_CARD_READY__` setup block.
+
+`playwright/membership-picker.spec.ts` reuses
+`playwright/fixtures/selected-light-shapes-card.html` with deterministic
+membership scenarios. It covers:
+
+- immutable **Current group only (N)** behavior;
+- hidden, disabled, unavailable, missing, and overlapping statuses;
+- keyboard focus/escape recovery and 200% zoom reflow;
+- fixed 100- and 1,000-candidate scale distributions; and
+- the actual `v2.17.2` bundle against a fake current backend that returns
+  `disabled_entity`.
+
+The prior-bundle test resolves both the tag commit and bundle SHA-256 from Git.
+If a shallow checkout does not contain the tag, fetch tags before claiming
+binary-skew proof:
+
+```sh
+git fetch --tags
+cd js
+npx playwright test membership-picker.spec.ts --grep "prior stable"
+```
+
+A skipped tag is not a binary-skew pass. Payload-only scenarios are labelled
+contract simulation.
+
+The scale test runs three warmups followed by twenty measured samples for
+initial render at both 100 and 1,000 candidates, then repeats that protocol for
+warmed search/filter work. It attaches machine-readable JSON with the commit,
+browser, OS/CPU, deterministic distribution, raw samples, median, p95, and
+threshold. CI asserts the protocol and UI result, not a hard wall-clock limit:
+shared runners are too noisy for a reliable timing gate. Review the attached
+p95 report on a named machine against 250 ms at 100 candidates, 750 ms at
+1,000, and 100 ms for warmed search. If a target fails, optimize in the same
+membership branch and rerun before considering virtualization.
 
 ### HACS brand assets
 
@@ -295,14 +417,24 @@ reintroduction of the old upstream-derived image hashes.
 
 Lightener Studio ships UI strings for the config/options flow and Repair
 issues in `custom_components/lightener_studio/translations/` (`en`, `de`, `sk`,
-`pt-BR`). `en.json` is the source of truth; other locales may lag behind it
-(Home Assistant falls back to English for missing keys). To add or update a language:
+`pt-BR`). `en.json` is the source of truth. Translation quality may lag by
+temporarily carrying an English value, but locale files may not omit keys or
+placeholders: repository tests enforce exact structural parity. To add or
+update a language:
 
 1. Copy `en.json` to `<lang>.json` (e.g. `fr.json`) and translate only the
    values — keep every key, and leave `{placeholders}` and `**markdown**` intact.
 2. Match `en.json`'s structure exactly; `hassfest` (the Validate workflow) fails
    on a malformed or out-of-sync translation file.
 3. No code change is needed — Home Assistant loads the file by name.
+
+For membership error changes, both `config.error.disabled_entity` and
+`options.error.disabled_entity` must exist in every shipped locale with the
+same placeholders. Run:
+
+```sh
+scripts/test-python tests/components/lightener_studio/test_translations.py -q
+```
 
 Translating is the lowest-friction first contribution, and very welcome.
 
@@ -317,15 +449,37 @@ Every pull request runs a CI check (`verify-claims`) that requires a `## Proof`
 block at the end of the PR body. The PR template scaffolds one — fill each line
 with a real artifact or mark it `n/a — <reason>`:
 
-- Check a box (`- [x]`) and give a real artifact (a CI run URL, or a file path), **or**
+- Check a box (`- [x]`) and give a reviewer-accessible artifact: a CI/fork
+  Actions URL, PR attachment, or tracked repository-relative path, **or**
 - leave it unchecked (`- [ ]`) with `n/a — <reason>` when the line doesn't apply.
   A docs-only PR can mark build / tests / lint / runtime / schema `n/a`.
+
+Absolute paths, `file://` links, localhost URLs, and ignored `.context/` paths
+are working notes, not proof: another reviewer cannot open them. For a
+WebSocket or compatibility change, the schema/runtime evidence should identify
+the integration commit, exact frontend tag and commit where relevant, Home
+Assistant Core and frontend versions for live proof, browser, skew result, and
+the attached deterministic performance report.
 
 **Opening from a fork?** The check runs in strict mode and will not accept `n/a`
 on the `runtime:` line. Instead, link the green CI run on your fork (the Actions
 tab → the run for your branch) or attach a screenshot for a UI change; everything
 else can still be `n/a — <reason>`. (Relaxing this for community fork PRs is
 tracked upstream in `florianhorner/gh-workflows`.)
+
+### Escalation and contributor escape hatches
+
+Ask in an issue or draft pull request before changing the candidate capability
+semantics, membership write authority, supported Home Assistant floor, or
+ownership of a Home Assistant frontend route. Include the exact request and
+response payload, versions, stable error code, and reviewer-accessible proof.
+
+No maintainer-only infrastructure is required: fork Actions URLs plus PR
+attachments are valid evidence. For route-compatibility investigation,
+`unsupported; retain brand` is a successful bounded outcome when an exact
+Core/frontend pair does not protect the proposed route. Record the pair and
+visible result, keep the supported `?brand=lightener_studio` route, and do not
+open a speculative route-change PR.
 
 ## Reporting bugs
 

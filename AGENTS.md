@@ -69,33 +69,31 @@ Useful proof artifacts:
 Known traps:
 
 - If the HA UI hangs on "Loading data", do not debug Lightener first. Check the
-  extra runtime dependency section below and grep the `scripts/develop` log for
-  `ModuleNotFoundError` or `handle_get_services`.
+  isolated-runtime dependency section below, the `scripts/develop` preflight
+  output, and its log for `ModuleNotFoundError` or `handle_get_services`.
 - Before the first Lightener config entry exists, `lightener/*` websocket commands
   are not registered. That absence is expected; create a config entry through HA.
 - HA may emit a generic frontend console error while routing. Treat Lightener's
   websocket logs, UI state, and `core.config_entries` persistence as the stronger
   evidence unless the console error names Lightener code.
 
-### Critical: extra runtime deps the dev UI needs (not in requirements.txt)
+### Critical: isolated HA runtime dependencies
 
 The HA web UI calls the `get_services` websocket command on load. HA does **not**
 auto-install its built-in integrations' Python requirements in this venv, so if a
 default integration's module can't be imported, `get_services` crashes and the
 **frontend hangs forever on "Loading data"** (backend otherwise looks healthy).
-These packages (matching HA 2026.2.x manifests) are installed into `.venv` by the
-update script / baked into the snapshot and must remain present:
-`PyTurboJPEG==1.8.0`, `hassil`, `home-assistant-intents`, `home-assistant-frontend`,
-`mutagen`, `av`, `ha-ffmpeg`, `pycountry`, `radios`, `pymicro-vad`, `pyspeex-noise`.
-If the UI ever hangs on "Loading data", grep the `scripts/develop` log for
-`ModuleNotFoundError` / `handle_get_services` and install the missing module.
+The exact HA 2026.2.x-compatible pins live in `requirements-ha-runtime.txt`;
+`scripts/setup-python` installs them into `.venv` with the required gcc/g++
+compiler settings. `scripts/develop` validates those imports and `TurboJPEG()`
+before starting HA, so use its preflight failure as the first recovery signal.
 
-- `PyTurboJPEG` requires the system lib `libturbojpeg` (apt; on Ubuntu Noble the
-  package is `libturbojpeg`, not `libturbojpeg0`). It is baked into the snapshot.
-  Use `PyTurboJPEG==1.8.0` (2.x needs libjpeg-turbo 3.0+, Noble ships 2.1.x).
-- `pymicro-vad` / `pyspeex-noise` are compiled from source and must build with
-  gcc/g++ (`CC=gcc CXX=g++`); the default `/usr/bin/c++` is clang++ here and fails
-  to find libstdc++ headers (`'cstddef' file not found`).
+- `PyTurboJPEG` also requires the native jpeg-turbo library. On Debian/Ubuntu,
+  `sudo scripts/setup` selects an installable `libturbojpeg` package. On macOS,
+  install `jpeg-turbo` with Homebrew; `scripts/develop` exposes its library path.
+- If the preflight succeeds but the UI still hangs, grep the `scripts/develop`
+  log for `ModuleNotFoundError` or `handle_get_services` before debugging
+  Lightener.
 
 ### mypy caveat
 
