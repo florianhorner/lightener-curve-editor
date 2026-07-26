@@ -417,6 +417,13 @@ async def test_candidate_list_matches_shared_v1_state_fixture(
 
     expected_by_id = {item["entity_id"]: item for item in expected["lights"]}
     actual_by_id = {item["entity_id"]: item for item in result["lights"]}
+    test_harness_ids = {
+        "light.test1",
+        "light.test2",
+        "light.test_onoff",
+        "light.test_temp",
+    }
+    assert set(actual_by_id) == set(expected_by_id) | test_harness_ids
     assert {
         entity_id: actual_by_id[entity_id] for entity_id in expected_by_id
     } == expected_by_id
