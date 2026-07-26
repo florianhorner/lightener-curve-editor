@@ -93,22 +93,46 @@ export const UI = {
   membership: {
     /** Dialog heading (and the legend button that opens it). */
     title: 'Edit lights',
-    /** Sub-heading reassuring that per-light shapes are preserved. */
-    subtitle: 'Add or remove lights together. Existing shapes stay exactly as they are.',
+    /** Sub-heading explaining the batch membership edit. */
+    subtitle: 'Choose which lights this group controls. Existing shapes stay exactly as they are.',
     /** Accessible name for the dialog close button. */
     close: 'Close',
-    /** Label and placeholder for the light search box. */
+    /** Visible label and placeholder for the light search box. */
     search: 'Search lights',
-    /** Accessible name for the area filter. */
-    areaFilter: 'Filter by area',
+    searchPlaceholder: 'Search name or ID…',
+    /** Visible label for the area filter. */
+    areaFilter: 'Area',
     /** Area-filter option covering every area. */
     allAreas: 'All areas',
+    /** Temporary, dialog-local scope filters. */
+    currentGroupOnly: (count: number) => `Current group only (${count})`,
+    showExceptional: (count: number) => `Show hidden & disabled (${count})`,
+    candidateList: 'Lights available to this group',
     /** Status shown while the candidate lights load. */
     loading: 'Loading lights…',
-    /** Shown when the search/area filter matches nothing. */
-    empty: 'No lights match this filter.',
-    /** Suffix marking a retained light that no longer exists. */
+    /** Mutually exclusive empty-state copy and recovery actions. */
+    sourceEmpty: 'No lights are available to add.',
+    filterEmpty: 'No lights match these filters.',
+    clearFilters: 'Clear search and area',
+    scopeEmpty: 'No lights in this view.',
+    showAllLights: 'Show all lights',
+    exceptionalEmpty: (count: number) =>
+      `${count} hidden or disabled ${count === 1 ? 'light' : 'lights'}.`,
+    showExceptionalAction: 'Show hidden & disabled',
+    /** Candidate status labels, rendered in this order. */
+    hidden: 'Hidden',
+    disabled: 'Disabled',
+    missing: 'Missing',
     unavailable: 'Unavailable',
+    lightCheckboxLabel: (name: string, statuses: readonly string[]) =>
+      statuses.length === 0 ? name : `${name}, ${statuses.join(', ')}`,
+    /** Result summary for the filtered view and immutable pending selection. */
+    resultSummary: (shown: number, visibleSelected: number, totalSelected: number) => {
+      const shownCopy = `${shown} ${shown === 1 ? 'light' : 'lights'} shown`;
+      return visibleSelected === totalSelected
+        ? `${shownCopy} · ${totalSelected} selected`
+        : `${shownCopy} · ${visibleSelected} of ${totalSelected} selected shown`;
+    },
     /** Running count of selected lights. */
     selectedCount: (count: number) => `${count} selected`,
     /** Dismiss without saving. */
@@ -116,11 +140,17 @@ export const UI = {
     /** Primary action label, idle and in-flight. */
     apply: 'Update lights',
     applying: 'Updating…',
+    applyingStatus: 'Updating group lights.',
+    updated: 'Lights updated.',
+    tryAgain: 'Try again',
     /** Error copy. */
     loadError: 'Could not load lights.',
     applyError: 'Could not update lights.',
     emptyError: 'Select at least one light.',
     conflictError: 'This group changed. Close and reopen Edit lights.',
+    disabledError:
+      'A selected light is disabled in Home Assistant. Enable the light in Home Assistant settings, then try again.',
+    reloadError: 'The group could not be reloaded. Your previous selection was restored.',
     rollbackError:
       'The update failed and the group runtime may need attention. Open Integrations to retry.',
   },

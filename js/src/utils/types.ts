@@ -11,6 +11,24 @@ export interface LightCurve {
   color: string;
 }
 
+/** One normalized candidate shown by the transactional membership editor. */
+export interface CandidateLight {
+  entity_id: string;
+  name: string;
+  available: boolean;
+  area_id: string | null;
+  area_name: string | null;
+  hidden: boolean;
+  disabled: boolean;
+  missing: boolean;
+}
+
+export interface MembershipResponse {
+  entities: Record<string, { brightness: Record<string, string> }>;
+  added_entity_ids: string[];
+  removed_entity_ids: string[];
+}
+
 /** Minimal subset of the Home Assistant `hass` object used by this card. */
 export interface Hass {
   user: { is_admin: boolean };

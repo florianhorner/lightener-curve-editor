@@ -1,45 +1,44 @@
-import { LitElement, css, html, nothing } from 'lit';
+import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import type { Hass } from '../utils/types.js';
+import { repeat } from 'lit/directives/repeat.js';
+import {
+  normalizeCandidateResponse,
+  sortCandidatesAtDialogOpen,
+  type CandidateMetadataMode,
+} from '../utils/candidate-lights.js';
 import { safeDefine } from '../utils/safe-define.js';
 import { UI } from '../utils/strings.js';
-
-interface CandidateLight {
-  entity_id: string;
-  name: string;
-  available: boolean;
-  area_id: string | null;
-  area_name: string | null;
-}
-
-interface CandidateResponse {
-  observed_controlled_entity_ids: string[];
-  lights: CandidateLight[];
-}
-
-interface MembershipResponse {
-  entities: Record<string, { brightness: Record<string, string> }>;
-  added_entity_ids: string[];
-  removed_entity_ids: string[];
-}
+import type { CandidateLight, Hass, MembershipResponse } from '../utils/types.js';
 
 export class LightMembershipDialog extends LitElement {
   @property({ attribute: false }) hass: Hass | null = null;
   @property({ type: String }) groupEntityId = '';
 
   @state() private _lights: CandidateLight[] = [];
-  @state() private _observed: string[] = [];
-  @state() private _selected = new Set<string>();
+  @state() private _observedOrder: string[] = [];
+  @state() private _pendingSelectedIds = new Set<string>();
+  @state() private _metadataMode: CandidateMetadataMode = 'legacy';
   @state() private _search = '';
   @state() private _areaId = '';
+  @state() private _currentGroupOnly = false;
+  @state() private _showExceptional = false;
   @state() private _loading = true;
   @state() private _applying = false;
-  @state() private _error: string | null = null;
+  @state() private _loadError: string | null = null;
+  @state() private _applyError: string | null = null;
+  @state() private _applyErrorCode: string | null = null;
+  @state() private _announcedResultSummary = '';
+
+  private _initialMemberIds = new Set<string>();
+  private _candidateOrder: string[] = [];
   private _loadInFlight = false;
   private _loaded = false;
-  private _lastLoadStatesRef: unknown = null;
+  private _loadSerial = 0;
+  private _metadataWarningEmitted = false;
+  private _resultAnnouncementTimer: ReturnType<typeof setTimeout> | null = null;
 
   private _boundKeydown = (event: KeyboardEvent) => this._onKeydown(event);
+  private static readonly RESULT_ANNOUNCEMENT_DELAY_MS = 250;
 
   static styles = css`
     :host {
@@ -57,7 +56,7 @@ export class LightMembershipDialog extends LitElement {
       width: min(600px, 100%);
       max-height: min(760px, calc(100vh - 40px));
       display: grid;
-      grid-template-rows: auto auto minmax(180px, 1fr) auto;
+      grid-template-rows: auto auto minmax(96px, 1fr) auto;
       overflow: hidden;
       border-radius: 8px;
       background: var(--card-background-color, #fff);
@@ -82,10 +81,14 @@ export class LightMembershipDialog extends LitElement {
       font-size: 13px;
       line-height: 1.45;
     }
+    .group-name {
+      color: var(--primary-text-color, #20252a);
+      font-weight: 650;
+    }
     .close {
-      width: 38px;
-      height: 38px;
-      margin-left: auto;
+      width: 44px;
+      height: 44px;
+      margin: -3px -5px -3px auto;
       border: 0;
       border-radius: 6px;
       background: transparent;
@@ -96,16 +99,30 @@ export class LightMembershipDialog extends LitElement {
     .close:hover:not(:disabled) {
       background: color-mix(in srgb, var(--primary-text-color) 8%, transparent);
     }
+    .controls {
+      display: grid;
+      gap: 10px;
+      padding: 14px 22px;
+    }
     .filters {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(150px, 0.45fr);
       gap: 10px;
-      padding: 14px 22px;
+    }
+    .field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+    .field-label {
+      color: var(--secondary-text-color, #66717b);
+      font-size: 12px;
+      font-weight: 650;
     }
     input[type='search'],
     select {
       width: 100%;
-      height: 42px;
+      height: 44px;
       box-sizing: border-box;
       border: 1px solid var(--divider-color, #d7dde1);
       border-radius: 6px;
@@ -119,6 +136,33 @@ export class LightMembershipDialog extends LitElement {
     button:focus-visible {
       outline: 2px solid var(--primary-color, #1590ad);
       outline-offset: 2px;
+    }
+    .scope-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 18px;
+    }
+    .scope-option {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      box-sizing: border-box;
+      color: var(--primary-text-color, #20252a);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .scope-option input,
+    .light-row input {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      accent-color: var(--primary-color, #1590ad);
+    }
+    .result-summary {
+      min-height: 18px;
+      color: var(--secondary-text-color, #66717b);
+      font-size: 12px;
     }
     .list {
       overflow: auto;
@@ -135,13 +179,11 @@ export class LightMembershipDialog extends LitElement {
       border-bottom: 1px solid color-mix(in srgb, var(--divider-color) 68%, transparent);
       cursor: pointer;
     }
-    .light-row:hover {
+    .light-row:hover:not(.new-disabled) {
       background: color-mix(in srgb, var(--primary-color, #1590ad) 6%, transparent);
     }
-    .light-row input {
-      width: 18px;
-      height: 18px;
-      accent-color: var(--primary-color, #1590ad);
+    .light-row.new-disabled {
+      cursor: default;
     }
     .name,
     .entity-id {
@@ -156,22 +198,40 @@ export class LightMembershipDialog extends LitElement {
     }
     .entity-id,
     .area,
-    .empty,
-    .loading {
+    .empty-copy,
+    .loading-copy {
       color: var(--secondary-text-color, #66717b);
       font-size: 12px;
     }
     .area {
-      text-align: right;
       max-width: 150px;
+      text-align: right;
     }
-    .unavailable {
-      opacity: 0.68;
-    }
-    .empty,
-    .loading {
-      padding: 28px 22px;
+    .state-message {
+      min-height: 96px;
+      display: grid;
+      place-content: center;
+      justify-items: center;
+      gap: 12px;
+      padding: 24px 22px;
+      box-sizing: border-box;
       text-align: center;
+    }
+    .skeletons {
+      width: min(320px, 80vw);
+      display: grid;
+      gap: 8px;
+    }
+    .skeleton {
+      height: 12px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--secondary-text-color, #66717b) 14%, transparent);
+    }
+    .skeleton:nth-child(2) {
+      width: 84%;
+    }
+    .skeleton:nth-child(3) {
+      width: 70%;
     }
     footer {
       display: flex;
@@ -186,13 +246,15 @@ export class LightMembershipDialog extends LitElement {
       font-size: 13px;
     }
     .error {
-      flex-basis: 100%;
       color: var(--error-color, #b3261e);
       font-size: 13px;
+    }
+    footer .error {
+      flex-basis: 100%;
       margin-bottom: 4px;
     }
     .action {
-      min-height: 40px;
+      min-height: 44px;
       padding: 0 16px;
       border-radius: 6px;
       border: 1px solid var(--divider-color, #d7dde1);
@@ -213,6 +275,17 @@ export class LightMembershipDialog extends LitElement {
       opacity: 0.58;
       cursor: default;
     }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     @media (max-width: 620px) {
       :host {
         padding: 0;
@@ -224,14 +297,46 @@ export class LightMembershipDialog extends LitElement {
         height: 100%;
         border-radius: 0;
       }
+      header {
+        padding-top: calc(17px + env(safe-area-inset-top));
+      }
       .filters {
         grid-template-columns: 1fr;
       }
+      .scope-option {
+        width: 100%;
+      }
       .light-row {
+        grid-template-columns: 24px minmax(0, 1fr);
         padding-inline: 16px;
       }
+      .area {
+        grid-column: 2;
+        max-width: none;
+        text-align: left;
+      }
       footer {
-        padding-inline: 16px;
+        padding-right: calc(16px + env(safe-area-inset-right));
+        padding-bottom: calc(14px + env(safe-area-inset-bottom));
+        padding-left: calc(16px + env(safe-area-inset-left));
+      }
+      .count {
+        flex-basis: 100%;
+      }
+    }
+    @media (max-height: 420px) {
+      header {
+        padding-block: 10px 8px;
+      }
+      header p {
+        margin-top: 3px;
+      }
+      .controls {
+        gap: 4px;
+        padding-block: 7px;
+      }
+      footer {
+        padding-block: 7px;
       }
     }
   `;
@@ -239,32 +344,94 @@ export class LightMembershipDialog extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     document.addEventListener('keydown', this._boundKeydown);
-    void this._load();
+    if (this.hasUpdated) this._loadIfReady();
   }
 
   disconnectedCallback(): void {
+    this._loadSerial += 1;
+    this._loadInFlight = false;
+    if (!this._loaded) this._loading = false;
+    this._clearResultAnnouncementTimer();
     document.removeEventListener('keydown', this._boundKeydown);
     super.disconnectedCallback();
   }
 
   protected firstUpdated(): void {
-    this.renderRoot.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+    const loadError = this.renderRoot.querySelector<HTMLElement>('.load-error');
+    if (loadError) {
+      loadError.focus();
+      return;
+    }
+    const search = this.renderRoot.querySelector<HTMLInputElement>('#membership-search');
+    if (search && !search.disabled) {
+      search.focus();
+    } else {
+      this.renderRoot.querySelector<HTMLElement>('#membership-title')?.focus();
+    }
+  }
+
+  protected willUpdate(changed: Map<PropertyKey, unknown>): void {
+    const groupChanged =
+      changed.has('groupEntityId') && changed.get('groupEntityId') !== this.groupEntityId;
+    const inputBecameUnavailable =
+      (changed.has('hass') && !this.hass) || (changed.has('groupEntityId') && !this.groupEntityId);
+    if (groupChanged || inputBecameUnavailable) {
+      this._resetForGroup();
+    }
   }
 
   protected updated(changed: Map<PropertyKey, unknown>): void {
-    if (!(changed.has('hass') || changed.has('groupEntityId'))) return;
-    if (!this.hass || !this.groupEntityId || this._loadInFlight) return;
-    // A different group invalidates any prior load and its error latch.
-    if (changed.has('groupEntityId')) {
-      this._loaded = false;
-      this._error = null;
-      this._lastLoadStatesRef = null;
+    if (changed.has('hass') || changed.has('groupEntityId')) {
+      this._loadIfReady();
     }
-    if (this._loaded) return;
-    // After a completed attempt, don't re-run on every hass tick. Retry at most
-    // once per new hass.states object (matching the sibling panel's guard) so a
-    // failing backend can't spin _load() in a tight loop for the dialog's life.
-    if (this._lastLoadStatesRef !== null && this._lastLoadStatesRef === this.hass.states) {
+
+    if (
+      changed.has('_lights') ||
+      changed.has('_pendingSelectedIds') ||
+      changed.has('_search') ||
+      changed.has('_areaId') ||
+      changed.has('_currentGroupOnly') ||
+      changed.has('_showExceptional') ||
+      changed.has('_loaded') ||
+      changed.has('_loadError')
+    ) {
+      this._scheduleResultAnnouncement();
+    }
+  }
+
+  private _resetForGroup(): void {
+    this._loadSerial += 1;
+    this._loadInFlight = false;
+    this._loaded = false;
+    this._lights = [];
+    this._observedOrder = [];
+    this._initialMemberIds = new Set();
+    this._pendingSelectedIds = new Set();
+    this._candidateOrder = [];
+    this._metadataMode = 'legacy';
+    this._search = '';
+    this._areaId = '';
+    this._currentGroupOnly = false;
+    this._showExceptional = false;
+    this._loading = true;
+    this._applying = false;
+    this._loadError = null;
+    this._applyError = null;
+    this._applyErrorCode = null;
+    this._announcedResultSummary = '';
+    this._clearResultAnnouncementTimer();
+    if (!this.hass || !this.groupEntityId) this._loading = false;
+  }
+
+  private _loadIfReady(): void {
+    if (
+      !this.isConnected ||
+      !this.hass ||
+      !this.groupEntityId ||
+      this._loadInFlight ||
+      this._loaded ||
+      this._loadError
+    ) {
       return;
     }
     void this._load();
@@ -272,60 +439,171 @@ export class LightMembershipDialog extends LitElement {
 
   private async _load(): Promise<void> {
     if (!this.hass || !this.groupEntityId || this._loadInFlight) return;
+
+    const hass = this.hass;
+    const groupEntityId = this.groupEntityId;
+    const serial = ++this._loadSerial;
     this._loadInFlight = true;
     this._loading = true;
-    this._error = null;
+    this._loadError = null;
+    this._applyError = null;
+    this._applyErrorCode = null;
+
     try {
-      const result = await this.hass.callWS<CandidateResponse>({
-        type: 'lightener/list_candidate_lights',
-        entity_id: this.groupEntityId,
-      });
-      // A backend that predates this command (stale integration behind a fresh
-      // frontend) can answer with an empty/malformed object. Surface that as a
-      // load error instead of crashing render on undefined.filter.
-      if (
-        !Array.isArray(result?.lights) ||
-        !Array.isArray(result?.observed_controlled_entity_ids)
-      ) {
-        throw new Error(UI.membership.loadError);
+      let rawResponse: unknown;
+      try {
+        rawResponse = await hass.callWS<unknown>({
+          type: 'lightener/list_candidate_lights',
+          entity_id: groupEntityId,
+        });
+      } catch (error) {
+        if (serial === this._loadSerial && groupEntityId === this.groupEntityId) {
+          this._setLoadFailure(error, 'request');
+        }
+        return;
       }
-      this._lights = result.lights;
-      this._observed = result.observed_controlled_entity_ids;
-      this._selected = new Set(result.observed_controlled_entity_ids);
+      if (serial !== this._loadSerial || groupEntityId !== this.groupEntityId) return;
+
+      let response;
+      try {
+        response = normalizeCandidateResponse(rawResponse);
+      } catch (error) {
+        if (serial === this._loadSerial && groupEntityId === this.groupEntityId) {
+          this._setLoadFailure(error, 'response');
+        }
+        return;
+      }
+
+      if (response.metadataWarning && !this._metadataWarningEmitted) {
+        this._metadataWarningEmitted = true;
+        console.warn(response.metadataWarning);
+      }
+
+      this._initialMemberIds = new Set(response.observedControlledEntityIds);
+      this._candidateOrder = response.lights.map((light) => light.entity_id);
+      this._lights = sortCandidatesAtDialogOpen(
+        response.lights,
+        this._initialMemberIds,
+        hass.locale?.language
+      );
+      this._observedOrder = response.observedControlledEntityIds;
+      this._pendingSelectedIds = new Set(response.observedControlledEntityIds);
+      this._metadataMode = response.metadataMode;
       this._loaded = true;
-    } catch (error) {
-      this._error = this._errorMessage(error, UI.membership.loadError);
-    } finally {
-      this._loadInFlight = false;
+      this._loadError = null;
       this._loading = false;
-      // Record the states object this attempt ran against so updated() retries
-      // only when a genuinely new hass.states arrives, not on every tick.
-      this._lastLoadStatesRef = this.hass?.states ?? null;
+
+      this._afterNextRender('focus the loaded membership dialog', () => {
+        if (serial !== this._loadSerial || groupEntityId !== this.groupEntityId) return;
+        const heading = this.renderRoot.querySelector<HTMLElement>('#membership-title');
+        const active = this.shadowRoot?.activeElement ?? null;
+        if (active === null || active === heading) {
+          this._focusOrHeading(
+            this.renderRoot.querySelector<HTMLInputElement>('#membership-search')
+          );
+        }
+      });
+    } catch (error) {
+      if (serial === this._loadSerial && groupEntityId === this.groupEntityId) {
+        this._setLoadFailure(error, 'process');
+      }
+    } finally {
+      if (serial === this._loadSerial) {
+        this._loadInFlight = false;
+        this._loading = false;
+      }
     }
+  }
+
+  private _setLoadFailure(error: unknown, stage: 'request' | 'response' | 'process'): void {
+    console.error(`[Lightener] Failed to ${stage} candidate lights:`, error);
+    this._loaded = false;
+    this._loadError = UI.membership.loadError;
+    this._loading = false;
+    this._afterNextRender('focus the membership load error', () => {
+      this._focusOrHeading(this.renderRoot.querySelector<HTMLElement>('.load-error'));
+    });
+  }
+
+  private _afterNextRender(context: string, action: () => void): void {
+    void this.updateComplete.then(action).catch((error: unknown) => {
+      console.error(`[Lightener] Failed to ${context}:`, error);
+    });
+  }
+
+  private _retryLoad(): void {
+    if (this._loadInFlight || this._applying || !this._loadError) return;
+    this._loaded = false;
+    this._loadError = null;
+    this._loadIfReady();
   }
 
   private _errorMessage(error: unknown, fallback: string): string {
-    const value = error as { code?: string; message?: string } | null;
+    const value = error as { code?: unknown; message?: unknown } | null;
+    const message = typeof value?.message === 'string' && value.message ? value.message : null;
     if (value?.code === 'conflict') return UI.membership.conflictError;
-    if (value?.code === 'rollback_reload_failed') {
-      return UI.membership.rollbackError;
+    if (value?.code === 'disabled_entity') return message ?? UI.membership.disabledError;
+    if (value?.code === 'reload_failed') return UI.membership.reloadError;
+    if (value?.code === 'rollback_reload_failed') return UI.membership.rollbackError;
+    return message ?? fallback;
+  }
+
+  private get _groupName(): string {
+    return this.hass?.states[this.groupEntityId]?.attributes.friendly_name ?? this.groupEntityId;
+  }
+
+  private _isExceptional(light: CandidateLight): boolean {
+    return this._metadataMode === 'v1' && (light.hidden || light.disabled);
+  }
+
+  private _matchesSearchAndArea(light: CandidateLight): boolean {
+    if (this._areaId && light.area_id !== this._areaId) return false;
+    const query = this._search.trim().toLocaleLowerCase();
+    if (
+      query &&
+      !light.name.toLocaleLowerCase().includes(query) &&
+      !light.entity_id.toLocaleLowerCase().includes(query)
+    ) {
+      return false;
     }
-    return value?.message || fallback;
+    return true;
+  }
+
+  private _matchesScopeAndDiscovery(light: CandidateLight): boolean {
+    return (
+      (!this._currentGroupOnly || this._initialMemberIds.has(light.entity_id)) &&
+      this._matchesSearchAndArea(light)
+    );
+  }
+
+  private _isSuppressedExceptional(light: CandidateLight): boolean {
+    return (
+      this._isExceptional(light) &&
+      !this._initialMemberIds.has(light.entity_id) &&
+      !this._pendingSelectedIds.has(light.entity_id)
+    );
   }
 
   private get _visibleLights(): CandidateLight[] {
-    const query = this._search.trim().toLocaleLowerCase();
-    const language = this.hass?.locale?.language;
-    const collator = new Intl.Collator(language, { sensitivity: 'base', numeric: true });
-    return this._lights
-      .filter((light) => !this._areaId || light.area_id === this._areaId)
-      .filter(
-        (light) =>
-          !query ||
-          light.name.toLocaleLowerCase().includes(query) ||
-          light.entity_id.toLocaleLowerCase().includes(query)
-      )
-      .sort((a, b) => collator.compare(a.name, b.name) || a.entity_id.localeCompare(b.entity_id));
+    return this._lights.filter(
+      (light) =>
+        this._matchesScopeAndDiscovery(light) &&
+        (this._showExceptional || !this._isSuppressedExceptional(light))
+    );
+  }
+
+  private get _matchingExceptionalHiddenCount(): number {
+    if (this._metadataMode !== 'v1' || this._showExceptional) return 0;
+    return this._lights.filter(
+      (light) => this._matchesScopeAndDiscovery(light) && this._isSuppressedExceptional(light)
+    ).length;
+  }
+
+  private get _exceptionalCount(): number {
+    if (this._metadataMode !== 'v1') return 0;
+    return this._lights.filter(
+      (light) => this._matchesScopeAndDiscovery(light) && this._isSuppressedExceptional(light)
+    ).length;
   }
 
   private get _areas(): Array<{ id: string; name: string }> {
@@ -333,26 +611,133 @@ export class LightMembershipDialog extends LitElement {
     for (const light of this._lights) {
       if (light.area_id && light.area_name) seen.set(light.area_id, light.area_name);
     }
-    const collator = new Intl.Collator(this.hass?.locale?.language, { sensitivity: 'base' });
+    const collator = new Intl.Collator(this.hass?.locale?.language, {
+      sensitivity: 'base',
+    });
     return [...seen]
       .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => collator.compare(a.name, b.name));
+      .sort((left, right) => collator.compare(left.name, right.name));
   }
 
   private get _hasChanges(): boolean {
     return (
-      this._selected.size !== this._observed.length ||
-      this._observed.some((entityId) => !this._selected.has(entityId))
+      this._pendingSelectedIds.size !== this._observedOrder.length ||
+      this._observedOrder.some((entityId) => !this._pendingSelectedIds.has(entityId))
     );
   }
 
-  private _toggle(entityId: string): void {
-    if (this._applying) return;
-    const next = new Set(this._selected);
-    if (next.has(entityId)) next.delete(entityId);
-    else next.add(entityId);
-    this._selected = next;
-    this._error = null;
+  private get _applyBlockedByConflict(): boolean {
+    return this._applyErrorCode === 'conflict';
+  }
+
+  private _statuses(light: CandidateLight): string[] {
+    const statuses: string[] = [];
+    if (light.hidden) statuses.push(UI.membership.hidden);
+    if (light.disabled) statuses.push(UI.membership.disabled);
+    if (light.missing) {
+      statuses.push(UI.membership.missing);
+    } else if (!light.available && !light.disabled) {
+      statuses.push(UI.membership.unavailable);
+    }
+    return statuses;
+  }
+
+  private _isNewDisabled(light: CandidateLight): boolean {
+    return light.disabled && !this._initialMemberIds.has(light.entity_id);
+  }
+
+  private _toggle(light: CandidateLight): void {
+    if (this._applying || this._isNewDisabled(light)) return;
+    const next = new Set(this._pendingSelectedIds);
+    const wasSelected = next.has(light.entity_id);
+    if (wasSelected) next.delete(light.entity_id);
+    else next.add(light.entity_id);
+    const willDisappear =
+      wasSelected &&
+      !this._showExceptional &&
+      this._isExceptional(light) &&
+      !this._initialMemberIds.has(light.entity_id);
+    this._pendingSelectedIds = next;
+    if (!this._applyBlockedByConflict) {
+      this._applyError = null;
+      this._applyErrorCode = null;
+    }
+    if (willDisappear) {
+      this._afterNextRender('restore focus after hiding an exceptional light', () => {
+        this._focusOrHeading(
+          this.renderRoot.querySelector<HTMLInputElement>('.exceptional-filter')
+        );
+      });
+    }
+  }
+
+  private _clearSearchAndArea(): void {
+    this._search = '';
+    this._areaId = '';
+    this._afterNextRender('restore focus after clearing membership filters', () => {
+      this._focusOrHeading(this.renderRoot.querySelector<HTMLInputElement>('#membership-search'));
+    });
+  }
+
+  private _showAllLights(): void {
+    this._currentGroupOnly = false;
+    this._afterNextRender('restore focus after showing all lights', () => {
+      this._focusOrHeading(
+        this.renderRoot.querySelector<HTMLInputElement>('.light-row input:not(:disabled)')
+      );
+    });
+  }
+
+  private _revealExceptional(): void {
+    const firstRevealed = this._lights.find(
+      (light) => this._matchesScopeAndDiscovery(light) && this._isSuppressedExceptional(light)
+    )?.entity_id;
+    this._showExceptional = true;
+    this._afterNextRender('restore focus after revealing exceptional lights', () => {
+      const target = firstRevealed
+        ? [...this.renderRoot.querySelectorAll<HTMLInputElement>('input[data-entity-id]')].find(
+            (input) => input.dataset.entityId === firstRevealed && !input.disabled
+          )
+        : null;
+      this._focusOrHeading(target ?? null);
+    });
+  }
+
+  private _focusOrHeading(target: HTMLElement | null): void {
+    if (target && !target.matches(':disabled')) {
+      target.focus();
+      if (this.shadowRoot?.activeElement === target) return;
+    }
+    this.renderRoot.querySelector<HTMLElement>('#membership-title')?.focus();
+  }
+
+  private _clearResultAnnouncementTimer(): void {
+    if (this._resultAnnouncementTimer === null) return;
+    clearTimeout(this._resultAnnouncementTimer);
+    this._resultAnnouncementTimer = null;
+  }
+
+  private _scheduleResultAnnouncement(): void {
+    this._clearResultAnnouncementTimer();
+    if (!this._loaded || this._loadError) {
+      this._announcedResultSummary = '';
+      return;
+    }
+    const visible = this._visibleLights;
+    const visibleSelected = visible.filter((light) =>
+      this._pendingSelectedIds.has(light.entity_id)
+    ).length;
+    const summary = UI.membership.resultSummary(
+      visible.length,
+      visibleSelected,
+      this._pendingSelectedIds.size
+    );
+    this._resultAnnouncementTimer = setTimeout(() => {
+      this._resultAnnouncementTimer = null;
+      if (this.isConnected && this._loaded && !this._loadError) {
+        this._announcedResultSummary = summary;
+      }
+    }, LightMembershipDialog.RESULT_ANNOUNCEMENT_DELAY_MS);
   }
 
   private _close(): void {
@@ -361,27 +746,43 @@ export class LightMembershipDialog extends LitElement {
   }
 
   private async _apply(): Promise<void> {
-    if (!this.hass || !this.groupEntityId || this._applying) return;
-    if (this._selected.size === 0) {
-      this._error = UI.membership.emptyError;
+    if (
+      !this.hass ||
+      !this.groupEntityId ||
+      this._applying ||
+      this._loading ||
+      this._applyBlockedByConflict
+    ) {
+      return;
+    }
+    if (this._pendingSelectedIds.size === 0) {
+      this._applyError = UI.membership.emptyError;
+      this._afterNextRender('focus the empty membership error', () => {
+        this._focusOrHeading(this.renderRoot.querySelector<HTMLElement>('.apply-error'));
+      });
       return;
     }
     if (!this._hasChanges) return;
+
     this._applying = true;
-    this._error = null;
+    this._applyError = null;
+    this._applyErrorCode = null;
+    let failed = false;
     try {
-      const observed = new Set(this._observed);
-      const controlled = this._observed.filter((entityId) => this._selected.has(entityId));
+      const observed = new Set(this._observedOrder);
+      const controlled = this._observedOrder.filter((entityId) =>
+        this._pendingSelectedIds.has(entityId)
+      );
       controlled.push(
-        ...this._lights
-          .map((light) => light.entity_id)
-          .filter((entityId) => this._selected.has(entityId) && !observed.has(entityId))
+        ...this._candidateOrder.filter(
+          (entityId) => this._pendingSelectedIds.has(entityId) && !observed.has(entityId)
+        )
       );
       const result = await this.hass.callWS<MembershipResponse>({
         type: 'lightener/set_controlled_lights',
         entity_id: this.groupEntityId,
         controlled_entity_ids: controlled,
-        observed_controlled_entity_ids: this._observed,
+        observed_controlled_entity_ids: this._observedOrder,
       });
       this.dispatchEvent(
         new CustomEvent('membership-applied', {
@@ -391,11 +792,19 @@ export class LightMembershipDialog extends LitElement {
         })
       );
     } catch (error) {
-      this._error = this._errorMessage(error, UI.membership.applyError);
-      await this.updateComplete;
-      this.renderRoot.querySelector<HTMLElement>('.error')?.focus();
+      failed = true;
+      this._applyErrorCode =
+        typeof (error as { code?: unknown } | null)?.code === 'string'
+          ? ((error as { code: string }).code ?? null)
+          : null;
+      this._applyError = this._errorMessage(error, UI.membership.applyError);
     } finally {
       this._applying = false;
+    }
+    if (failed) {
+      this._afterNextRender('focus the membership update error', () => {
+        this._focusOrHeading(this.renderRoot.querySelector<HTMLElement>('.apply-error'));
+      });
     }
   }
 
@@ -414,32 +823,164 @@ export class LightMembershipDialog extends LitElement {
         'button:not(:disabled), input:not(:disabled), select:not(:disabled)'
       ),
     ];
-    if (focusable.length === 0) return;
+    if (focusable.length === 0) {
+      event.preventDefault();
+      this.renderRoot.querySelector<HTMLElement>('#membership-title')?.focus();
+      return;
+    }
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    if (event.shiftKey && this.shadowRoot?.activeElement === first) {
+    const active = this.shadowRoot?.activeElement ?? null;
+    if (!focusable.includes(active as HTMLElement)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && active === first) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && this.shadowRoot?.activeElement === last) {
+    } else if (!event.shiftKey && active === last) {
       event.preventDefault();
       first.focus();
     }
   }
 
+  private _renderEmptyState(): TemplateResult {
+    if (this._lights.length === 0) {
+      return html`<div class="state-message">
+        <div class="empty-copy">${UI.membership.sourceEmpty}</div>
+      </div>`;
+    }
+    if (this._matchingExceptionalHiddenCount > 0) {
+      return html`<div class="state-message">
+        <div class="empty-copy">
+          ${UI.membership.exceptionalEmpty(this._matchingExceptionalHiddenCount)}
+        </div>
+        <button
+          class="action"
+          type="button"
+          ?disabled=${this._applying}
+          @click=${this._revealExceptional}
+        >
+          ${UI.membership.showExceptionalAction}
+        </button>
+      </div>`;
+    }
+    if (this._search.trim() || this._areaId) {
+      return html`<div class="state-message">
+        <div class="empty-copy">${UI.membership.filterEmpty}</div>
+        <button
+          class="action"
+          type="button"
+          ?disabled=${this._applying}
+          @click=${this._clearSearchAndArea}
+        >
+          ${UI.membership.clearFilters}
+        </button>
+      </div>`;
+    }
+    if (this._currentGroupOnly) {
+      return html`<div class="state-message">
+        <div class="empty-copy">${UI.membership.scopeEmpty}</div>
+        <button
+          class="action"
+          type="button"
+          ?disabled=${this._applying}
+          @click=${this._showAllLights}
+        >
+          ${UI.membership.showAllLights}
+        </button>
+      </div>`;
+    }
+    return html`<div class="state-message">
+      <div class="empty-copy">${UI.membership.filterEmpty}</div>
+    </div>`;
+  }
+
+  private _renderList(): TemplateResult {
+    if (this._loading) {
+      return html`<div class="state-message" role="status" aria-live="polite">
+        <div class="loading-copy">${UI.membership.loading}</div>
+        <div class="skeletons" aria-hidden="true">
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
+      </div>`;
+    }
+    if (this._loadError) {
+      return html`<div class="state-message">
+        <div class="error load-error" role="alert" aria-live="assertive" tabindex="-1">
+          ${this._loadError}
+        </div>
+        <button class="action" type="button" @click=${this._retryLoad}>
+          ${UI.membership.tryAgain}
+        </button>
+      </div>`;
+    }
+
+    const visible = this._visibleLights;
+    if (visible.length === 0) return this._renderEmptyState();
+
+    return html`${repeat(
+      visible,
+      (light) => light.entity_id,
+      (light) => {
+        const statuses = this._statuses(light);
+        const metadataId = `membership-light-meta-${light.entity_id.replace(
+          /[^a-zA-Z0-9_-]/g,
+          '-'
+        )}`;
+        const newDisabled = this._isNewDisabled(light);
+        return html`
+          <label class="light-row ${newDisabled ? 'new-disabled' : ''}">
+            <input
+              type="checkbox"
+              data-entity-id=${light.entity_id}
+              .checked=${this._pendingSelectedIds.has(light.entity_id)}
+              ?disabled=${this._applying || newDisabled}
+              aria-label=${UI.membership.lightCheckboxLabel(light.name, statuses)}
+              aria-describedby=${metadataId}
+              @change=${() => this._toggle(light)}
+            />
+            <span>
+              <span class="name">${light.name}</span>
+              <span class="entity-id"
+                ><span id=${metadataId}>${light.entity_id}</span>${statuses.length > 0
+                  ? ` · ${statuses.join(' · ')}`
+                  : ''}</span
+              >
+            </span>
+            ${light.area_name ? html`<span class="area">${light.area_name}</span>` : nothing}
+          </label>
+        `;
+      }
+    )}`;
+  }
+
   render() {
     const visible = this._visibleLights;
+    const visibleSelected = visible.filter((light) =>
+      this._pendingSelectedIds.has(light.entity_id)
+    ).length;
+    const disabled = this._loading || this._applying || !this._loaded;
+    const zeroSelection = this._loaded && this._pendingSelectedIds.size === 0;
+
     return html`
       <section
         class="dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="membership-title"
+        aria-describedby="membership-context"
+        aria-busy=${this._applying ? 'true' : 'false'}
         @click=${(event: Event) => event.stopPropagation()}
       >
         <header>
           <div>
-            <h2 id="membership-title">${UI.membership.title}</h2>
-            <p>${UI.membership.subtitle}</p>
+            <h2 id="membership-title" tabindex="-1">${UI.membership.title}</h2>
+            <p id="membership-context">
+              <span class="group-name">${this._groupName}</span>
+              <span aria-hidden="true"> · </span>${UI.membership.subtitle}
+            </p>
           </div>
           <button
             class="close"
@@ -451,74 +992,128 @@ export class LightMembershipDialog extends LitElement {
             ×
           </button>
         </header>
-        <div class="filters">
-          <input
-            type="search"
-            aria-label=${UI.membership.search}
-            placeholder=${UI.membership.search}
-            .value=${this._search}
-            ?disabled=${this._loading || this._applying}
-            @input=${(event: Event) => (this._search = (event.target as HTMLInputElement).value)}
-          />
-          <select
-            aria-label=${UI.membership.areaFilter}
-            .value=${this._areaId}
-            ?disabled=${this._loading || this._applying}
-            @change=${(event: Event) => (this._areaId = (event.target as HTMLSelectElement).value)}
-          >
-            <option value="">${UI.membership.allAreas}</option>
-            ${this._areas.map((area) => html`<option value=${area.id}>${area.name}</option>`)}
-          </select>
+
+        <div class="controls">
+          <div class="filters">
+            <label class="field">
+              <span class="field-label">${UI.membership.search}</span>
+              <input
+                id="membership-search"
+                type="search"
+                placeholder=${UI.membership.searchPlaceholder}
+                .value=${this._search}
+                ?disabled=${disabled}
+                @input=${(event: Event) => {
+                  this._search = (event.target as HTMLInputElement).value;
+                }}
+              />
+            </label>
+            <label class="field">
+              <span class="field-label">${UI.membership.areaFilter}</span>
+              <select
+                .value=${this._areaId}
+                ?disabled=${disabled}
+                @change=${(event: Event) => {
+                  this._areaId = (event.target as HTMLSelectElement).value;
+                }}
+              >
+                <option value="">${UI.membership.allAreas}</option>
+                ${this._areas.map((area) => html`<option value=${area.id}>${area.name}</option>`)}
+              </select>
+            </label>
+          </div>
+
+          <div class="scope-filters">
+            ${this._loaded
+              ? html`<label class="scope-option">
+                  <input
+                    class="current-group-filter"
+                    type="checkbox"
+                    .checked=${this._currentGroupOnly}
+                    ?disabled=${disabled}
+                    @change=${(event: Event) => {
+                      this._currentGroupOnly = (event.target as HTMLInputElement).checked;
+                    }}
+                  />
+                  <span>${UI.membership.currentGroupOnly(this._initialMemberIds.size)}</span>
+                </label>`
+              : nothing}
+            ${this._loaded && this._metadataMode === 'v1'
+              ? html`<label class="scope-option">
+                  <input
+                    class="exceptional-filter"
+                    type="checkbox"
+                    .checked=${this._showExceptional}
+                    ?disabled=${disabled}
+                    @change=${(event: Event) => {
+                      this._showExceptional = (event.target as HTMLInputElement).checked;
+                    }}
+                  />
+                  <span>${UI.membership.showExceptional(this._exceptionalCount)}</span>
+                </label>`
+              : nothing}
+          </div>
+
+          ${this._loaded && !this._loadError
+            ? html`<div class="result-summary">
+                  ${UI.membership.resultSummary(
+                    visible.length,
+                    visibleSelected,
+                    this._pendingSelectedIds.size
+                  )}
+                </div>
+                <span
+                  class="sr-only result-announcement"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  >${this._announcedResultSummary}</span
+                >`
+            : html`<div class="result-summary" aria-hidden="true"></div>`}
         </div>
-        <div class="list" aria-busy=${this._loading ? 'true' : 'false'}>
-          ${this._loading
-            ? html`<div class="loading" role="status">${UI.membership.loading}</div>`
-            : visible.length === 0
-              ? html`<div class="empty">${UI.membership.empty}</div>`
-              : visible.map(
-                  (light) => html`
-                    <label class="light-row ${light.available ? '' : 'unavailable'}">
-                      <input
-                        type="checkbox"
-                        .checked=${this._selected.has(light.entity_id)}
-                        ?disabled=${this._applying}
-                        @change=${() => this._toggle(light.entity_id)}
-                      />
-                      <span>
-                        <span class="name">${light.name}</span>
-                        <span class="entity-id"
-                          >${light.entity_id}${light.available
-                            ? ''
-                            : ` · ${UI.membership.unavailable}`}</span
-                        >
-                      </span>
-                      ${light.area_name
-                        ? html`<span class="area">${light.area_name}</span>`
-                        : nothing}
-                    </label>
-                  `
-                )}
+
+        <div
+          class="list"
+          role="region"
+          aria-label=${UI.membership.candidateList}
+          aria-busy=${this._loading ? 'true' : 'false'}
+        >
+          ${this._renderList()}
         </div>
+
         <footer>
-          ${this._error
-            ? html`<div class="error" role="alert" aria-live="assertive" tabindex="-1">
-                ${this._error}
+          ${this._applyError
+            ? html`<div class="error apply-error" role="alert" aria-live="assertive" tabindex="-1">
+                ${this._applyError}
               </div>`
+            : zeroSelection
+              ? html`<div class="error selection-error" role="status">
+                  ${UI.membership.emptyError}
+                </div>`
+              : nothing}
+          ${this._applying
+            ? html`<span class="sr-only applying-status" role="status" aria-live="polite"
+                >${UI.membership.applyingStatus}</span
+              >`
             : nothing}
-          <span class="count">${UI.membership.selectedCount(this._selected.size)}</span>
+          <span class="count">${UI.membership.selectedCount(this._pendingSelectedIds.size)}</span>
           <button class="action" type="button" ?disabled=${this._applying} @click=${this._close}>
             ${UI.membership.cancel}
           </button>
           <button
             class="action primary"
             type="button"
-            ?disabled=${this._loading ||
-            this._applying ||
-            this._selected.size === 0 ||
-            !this._hasChanges}
+            ?disabled=${disabled ||
+            zeroSelection ||
+            !this._hasChanges ||
+            this._applyBlockedByConflict}
             @click=${this._apply}
           >
-            ${this._applying ? UI.membership.applying : UI.membership.apply}
+            ${this._applying
+              ? UI.membership.applying
+              : this._applyError && !this._applyBlockedByConflict
+                ? UI.membership.tryAgain
+                : UI.membership.apply}
           </button>
         </footer>
       </section>

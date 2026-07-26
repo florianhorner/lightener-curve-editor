@@ -46,6 +46,12 @@
       import '../../../docs/lightener-curve-card.js';
 
       const LIGHTENER_ENTITY = 'light.lightener';
+      const params = new URLSearchParams(window.location.search);
+      const membershipScenario = params.get('membership') ?? 'default';
+      const requestedCandidateCount = Number(params.get('candidates') ?? '100');
+      const DISABLED_ENTITY_MESSAGE = (entityId) =>
+        `Could not add ${entityId} because it is disabled in Home Assistant. ` +
+        'Enable it under Settings → Devices & services → Entities, reopen Edit lights, and try again.';
 
       // A fresh group: every light at the equal-brightness default ({1:1,100:100}
       // -> [{0,0},{1,1},{100,100}]). The card should show the compact Shapes
@@ -55,17 +61,173 @@
         'light.a': { brightness: { ...FRESH_DEFAULT } },
         'light.b': { brightness: { ...FRESH_DEFAULT } },
       };
+      if (membershipScenario === 'exceptional') {
+        entities['light.missing_member'] = { brightness: { ...FRESH_DEFAULT } };
+      }
+
+      function candidate(
+        entityId,
+        name,
+        {
+          available = true,
+          areaId = null,
+          areaName = null,
+          hidden = false,
+          disabled = false,
+          missing = false,
+        } = {}
+      ) {
+        return {
+          entity_id: entityId,
+          name,
+          available,
+          area_id: areaId,
+          area_name: areaName,
+          hidden,
+          disabled,
+          missing,
+        };
+      }
+
+      const defaultCandidates = [
+        candidate('light.a', 'Alpha', {
+          areaId: 'living_room',
+          areaName: 'Living room',
+        }),
+        candidate('light.b', 'Bravo', {
+          areaId: 'bedroom',
+          areaName: 'Bedroom',
+        }),
+        candidate('light.new', 'New light', {
+          areaId: 'living_room',
+          areaName: 'Living room',
+        }),
+      ];
+
+      const exceptionalCandidates = [
+        candidate('light.a', 'Alpha', {
+          areaId: 'living_room',
+          areaName: 'Living room',
+        }),
+        candidate('light.b', 'Bravo unavailable', {
+          available: false,
+          areaId: 'bedroom',
+          areaName: 'Bedroom',
+        }),
+        candidate('light.missing_member', 'Missing member', {
+          available: false,
+          missing: true,
+        }),
+        candidate('light.new', 'New light', {
+          areaId: 'living_room',
+          areaName: 'Living room',
+        }),
+        candidate('light.unavailable_spare', 'Unavailable spare', {
+          available: false,
+          areaId: 'garage',
+          areaName: 'Garage',
+        }),
+        candidate('light.hidden_lamp', 'Hidden lamp', {
+          areaId: 'office',
+          areaName: 'Office',
+          hidden: true,
+        }),
+        candidate('light.disabled_lamp', 'Disabled lamp', {
+          available: false,
+          areaId: 'office',
+          areaName: 'Office',
+          disabled: true,
+        }),
+        candidate('light.hidden_disabled_lamp', 'Hidden disabled lamp', {
+          available: false,
+          areaId: 'garage',
+          areaName: 'Garage',
+          hidden: true,
+          disabled: true,
+        }),
+      ];
+
+      function scaleCandidates(count) {
+        const boundedCount = Math.max(2, Math.min(2000, Math.floor(count)));
+        const scaled = defaultCandidates.slice(0, 2);
+        for (let index = 2; index < boundedCount; index += 1) {
+          const hidden = index % 11 === 0;
+          const disabled = index % 17 === 0;
+          const available = index % 13 !== 0 && !disabled;
+          const areaIndex = index % 5;
+          scaled.push(
+            candidate(
+              `light.scale_${String(index).padStart(4, '0')}`,
+              `Scale candidate ${String(index).padStart(4, '0')} with a deterministic long name`,
+              {
+                available,
+                areaId: `area_${areaIndex}`,
+                areaName: `Area ${areaIndex}`,
+                hidden,
+                disabled,
+              }
+            )
+          );
+        }
+        return scaled;
+      }
+
+      const canonicalCandidates =
+        membershipScenario === 'scale'
+          ? scaleCandidates(requestedCandidateCount)
+          : membershipScenario === 'default'
+            ? defaultCandidates
+            : exceptionalCandidates;
+      const candidateById = new Map(canonicalCandidates.map((item) => [item.entity_id, item]));
+
+      function servedCandidateResponse() {
+        const lights = canonicalCandidates.map((item) => ({ ...item }));
+        if (membershipScenario === 'legacy') {
+          return {
+            observed_controlled_entity_ids: Object.keys(entities),
+            lights: lights.map(({ hidden, disabled, missing, ...legacy }) => legacy),
+          };
+        }
+        if (membershipScenario === 'malformed') {
+          delete lights[lights.length - 1].disabled;
+        }
+        return {
+          capabilities: { candidate_state_metadata: 1 },
+          observed_controlled_entity_ids: Object.keys(entities),
+          lights,
+        };
+      }
+
       window.__LIGHTENER_WS_CALLS__ = [];
       window.__LIGHTENER_SERVICE_CALLS__ = [];
       window.__LIGHTENER_SAVED__ = [];
+      window.__LIGHTENER_MEMBERSHIP_CANDIDATES__ = canonicalCandidates;
+      window.__LIGHTENER_FORCE_DISABLED_ENTITY__ = null;
 
+      const states = {
+        [LIGHTENER_ENTITY]: { state: 'on', attributes: { friendly_name: 'Lightener' } },
+        'light.a': { state: 'on', attributes: { friendly_name: 'Alpha', brightness: 255 } },
+        'light.b': {
+          state: membershipScenario === 'exceptional' ? 'unavailable' : 'on',
+          attributes: { friendly_name: 'Bravo', brightness: 255 },
+        },
+        'light.new': {
+          state: 'on',
+          attributes: { friendly_name: 'New light', brightness: 255 },
+        },
+        'light.unavailable_spare': {
+          state: 'unavailable',
+          attributes: { friendly_name: 'Unavailable spare' },
+        },
+        'light.hidden_lamp': {
+          state: 'on',
+          attributes: { friendly_name: 'Hidden lamp', brightness: 255 },
+        },
+      };
       const hass = {
         user: { is_admin: true },
-        states: {
-          [LIGHTENER_ENTITY]: { state: 'on', attributes: { friendly_name: 'Lightener' } },
-          'light.a': { state: 'on', attributes: { friendly_name: 'Alpha', brightness: 255 } },
-          'light.b': { state: 'on', attributes: { friendly_name: 'Bravo', brightness: 255 } },
-        },
+        locale: { language: 'en' },
+        states,
         callWS: async (msg) => {
           window.__LIGHTENER_WS_CALLS__.push(JSON.parse(JSON.stringify(msg)));
           if (msg.type === 'lightener/list_entities') {
@@ -75,32 +237,7 @@
             return { entities };
           }
           if (msg.type === 'lightener/list_candidate_lights') {
-            return {
-              observed_controlled_entity_ids: Object.keys(entities),
-              lights: [
-                {
-                  entity_id: 'light.a',
-                  name: 'Alpha',
-                  available: true,
-                  area_id: 'living_room',
-                  area_name: 'Living room',
-                },
-                {
-                  entity_id: 'light.b',
-                  name: 'Bravo',
-                  available: true,
-                  area_id: 'bedroom',
-                  area_name: 'Bedroom',
-                },
-                {
-                  entity_id: 'light.new',
-                  name: 'New light',
-                  available: true,
-                  area_id: 'living_room',
-                  area_name: 'Living room',
-                },
-              ],
-            };
+            return servedCandidateResponse();
           }
           if (msg.type === 'lightener/save_curves') {
             // Record the payload so the spec can assert the audition never changed it.
@@ -112,6 +249,17 @@
           if (msg.type === 'lightener/set_controlled_lights') {
             const before = Object.keys(entities);
             const selected = msg.controlled_entity_ids;
+            const disabledEntity = selected.find(
+              (entityId) =>
+                !before.includes(entityId) &&
+                (candidateById.get(entityId)?.disabled ||
+                  window.__LIGHTENER_FORCE_DISABLED_ENTITY__ === entityId)
+            );
+            if (disabledEntity) {
+              const error = new Error(DISABLED_ENTITY_MESSAGE(disabledEntity));
+              error.code = 'disabled_entity';
+              throw error;
+            }
             const next = Object.fromEntries(
               selected.map((entityId) => [
                 entityId,
@@ -120,10 +268,16 @@
             );
             Object.keys(entities).forEach((entityId) => delete entities[entityId]);
             Object.assign(entities, next);
-            hass.states['light.new'] = {
-              state: 'on',
-              attributes: { friendly_name: 'New light', brightness: 255 },
-            };
+            for (const entityId of selected) {
+              const metadata = candidateById.get(entityId);
+              hass.states[entityId] = hass.states[entityId] ?? {
+                state: 'on',
+                attributes: {
+                  friendly_name: metadata?.name ?? entityId,
+                  brightness: 255,
+                },
+              };
+            }
             return {
               entities,
               added_entity_ids: selected.filter((entityId) => !before.includes(entityId)),

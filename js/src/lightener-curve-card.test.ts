@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { LightenerCurveCard } from './lightener-curve-card.js';
 import type { Hass, LightCurve } from './utils/types.js';
 import type { LoadState } from './utils/load-lifecycle.js';
+import type { SaveAction } from './utils/save-lifecycle.js';
 import { CURVE_PRESETS, type PresetDef } from './utils/presets.js';
 
 // Tests reach private @state fields directly (instead of exposing a test-only
@@ -37,6 +38,12 @@ type CardInternals = {
   _presetGraphTrial: PresetDef | null;
   _lastPresetPointerType: string | null;
   _coachPhase: string;
+  _membershipStatus: string | null;
+  _membershipStatusTimer: number | null;
+  _openMembershipEditor: () => void;
+  _closeMembershipEditor: () => void;
+  _onMembershipApplied: (event: CustomEvent) => void;
+  _dispatchSave: (action: SaveAction) => void;
 };
 
 function forceDirty(card: LightenerCurveCard): void {
@@ -135,6 +142,22 @@ async function mountCard(
 function fireLegend(card: LightenerCurveCard, event: string, detail: Record<string, unknown>) {
   const legend = card.renderRoot.querySelector('curve-legend')!;
   legend.dispatchEvent(new CustomEvent(event, { detail, bubbles: true, composed: true }));
+}
+
+function applyMembership(
+  card: LightenerCurveCard,
+  entities: Record<string, { brightness: Record<string, string> }>,
+  addedEntityIds: string[] = []
+): void {
+  (card as unknown as CardInternals)._onMembershipApplied(
+    new CustomEvent('membership-applied', {
+      detail: {
+        entities,
+        added_entity_ids: addedEntityIds,
+        removed_entity_ids: [],
+      },
+    })
+  );
 }
 
 function renderedGraph(card: LightenerCurveCard): HTMLElement & {
@@ -246,6 +269,99 @@ describe('lightener-curve-card — light management', () => {
     expect(card.renderRoot.querySelector('light-membership-dialog')).toBeNull();
     expect(renderedGraph(card).readOnly).toBe(false);
     expect(membershipStates).toEqual([true, false]);
+    const legend = card.renderRoot.querySelector('curve-legend') as unknown as HTMLElement & {
+      updateComplete: Promise<boolean>;
+    };
+    await legend.updateComplete;
+    await Promise.resolve();
+    expect(legend.shadowRoot?.activeElement).toBe(
+      legend.shadowRoot?.querySelector('.add-light-btn')
+    );
+  });
+
+  it.each(['card', 'legend'] as const)(
+    'contains a rejected %s update while restoring focus after dialog close',
+    async (rejectionSource) => {
+      const { card } = await mountCard({
+        'light.a': { brightness: { '100': '100' } },
+      });
+      const internal = card as unknown as CardInternals;
+      internal._openMembershipEditor();
+      await card.updateComplete;
+
+      const failure = new Error(`${rejectionSource} update failed`);
+      const diagnostic = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const unhandled = vi.fn();
+      window.addEventListener('unhandledrejection', unhandled);
+
+      const target =
+        rejectionSource === 'card'
+          ? card
+          : (card.renderRoot.querySelector('curve-legend') as HTMLElement & {
+              updateComplete: Promise<boolean>;
+            });
+      const updateSpy = vi
+        .spyOn(target, 'updateComplete', 'get')
+        .mockImplementation(() => Promise.reject(failure));
+
+      internal._closeMembershipEditor();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(diagnostic).toHaveBeenCalledWith(
+        '[Lightener] Could not restore focus after closing Edit lights:',
+        failure
+      );
+      expect(unhandled).not.toHaveBeenCalled();
+
+      updateSpy.mockRestore();
+      diagnostic.mockRestore();
+      window.removeEventListener('unhandledrejection', unhandled);
+    }
+  );
+
+  it('does not restore background focus when Edit lights reopens during legend rendering', async () => {
+    const { card } = await mountCard({
+      'light.a': { brightness: { '100': '100' } },
+    });
+    const internal = card as unknown as CardInternals;
+    internal._openMembershipEditor();
+    await card.updateComplete;
+
+    const legend = card.renderRoot.querySelector('curve-legend') as HTMLElement & {
+      updateComplete: Promise<boolean>;
+    };
+    let resolveLegendUpdate!: (value: boolean) => void;
+    const pendingLegendUpdate = new Promise<boolean>((resolve) => {
+      resolveLegendUpdate = resolve;
+    });
+    const updateSpy = vi
+      .spyOn(legend, 'updateComplete', 'get')
+      .mockReturnValue(pendingLegendUpdate);
+
+    internal._closeMembershipEditor();
+    await vi.waitFor(() => expect(updateSpy).toHaveBeenCalled());
+
+    internal._openMembershipEditor();
+    await card.updateComplete;
+    const reopenedDialog = card.renderRoot.querySelector('light-membership-dialog') as
+      | (HTMLElement & { updateComplete: Promise<boolean> })
+      | null;
+    expect(reopenedDialog).not.toBeNull();
+    await reopenedDialog!.updateComplete;
+    await Promise.resolve();
+    expect(card.shadowRoot?.activeElement).toBe(reopenedDialog);
+
+    resolveLegendUpdate(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(card.renderRoot.querySelector('light-membership-dialog')).toBe(reopenedDialog);
+    expect(card.shadowRoot?.activeElement).toBe(reopenedDialog);
+    updateSpy.mockRestore();
   });
 
   it('selects the first newly added light from a confirmed batch response', async () => {
@@ -262,26 +378,166 @@ describe('lightener-curve-card — light management', () => {
 
     fireLegend(card, 'edit-lights', {});
     await card.updateComplete;
-    card.renderRoot.querySelector('light-membership-dialog')!.dispatchEvent(
-      new CustomEvent('membership-applied', {
-        bubbles: true,
-        composed: true,
-        detail: {
-          entities: {
-            'light.a': { brightness: { '100': '70' } },
-            'light.b': { brightness: { '100': '100' } },
-            'light.new': { brightness: { '1': '1', '100': '100' } },
-          },
-          added_entity_ids: ['light.new'],
-          removed_entity_ids: [],
-        },
-      })
+    vi.useFakeTimers();
+    applyMembership(
+      card,
+      {
+        'light.a': { brightness: { '100': '70' } },
+        'light.b': { brightness: { '100': '100' } },
+        'light.new': { brightness: { '1': '1', '100': '100' } },
+      },
+      ['light.new']
     );
     await card.updateComplete;
 
     expect(internal._selectedCurveId).toBe('light.new');
     expect(card.dirty).toBe(false);
     expect(card.renderRoot.querySelector('light-membership-dialog')).toBeNull();
+    expect(card.renderRoot.querySelector('.status-stack [role="status"]')?.textContent).toContain(
+      'Lights updated.'
+    );
+
+    await vi.advanceTimersByTimeAsync(1999);
+    await card.updateComplete;
+    expect(card.renderRoot.querySelector('.status-stack [role="status"]')?.textContent).toContain(
+      'Lights updated.'
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+    await card.updateComplete;
+    expect(card.renderRoot.querySelector('.status-stack [role="status"]')).toBeNull();
+  });
+
+  it('clears the membership status timer when the configured entity changes', async () => {
+    const { card, hass } = await mountCard({
+      'light.a': { brightness: { '100': '100' } },
+    });
+    const internal = card as unknown as CardInternals;
+    vi.useFakeTimers();
+
+    applyMembership(card, {
+      'light.a': { brightness: { '100': '100' } },
+    });
+    await card.updateComplete;
+    expect(internal._membershipStatusTimer).not.toBeNull();
+
+    hass.callWS.mockResolvedValue({ entities: {} });
+    card.setConfig({ entity: 'light.b' });
+    await card.updateComplete;
+
+    expect(internal._membershipStatus).toBeNull();
+    expect(internal._membershipStatusTimer).toBeNull();
+    expect(card.renderRoot.querySelector('.status-stack [role="status"]')).toBeNull();
+  });
+
+  it('clears the membership status timer when the editor reopens or the card disconnects', async () => {
+    const { card } = await mountCard({
+      'light.a': { brightness: { '100': '100' } },
+    });
+    const internal = card as unknown as CardInternals;
+    vi.useFakeTimers();
+
+    applyMembership(card, {
+      'light.a': { brightness: { '100': '100' } },
+    });
+    await card.updateComplete;
+    expect(internal._membershipStatusTimer).not.toBeNull();
+
+    internal._openMembershipEditor();
+    await card.updateComplete;
+    expect(internal._membershipStatus).toBeNull();
+    expect(internal._membershipStatusTimer).toBeNull();
+
+    applyMembership(card, {
+      'light.a': { brightness: { '100': '100' } },
+    });
+    await card.updateComplete;
+    expect(internal._membershipStatusTimer).not.toBeNull();
+
+    card.remove();
+    expect(internal._membershipStatus).toBeNull();
+    expect(internal._membershipStatusTimer).toBeNull();
+  });
+
+  it('replaces membership confirmation with a later save success instead of stacking statuses', async () => {
+    const { card } = await mountCard({
+      'light.a': { brightness: { '100': '100' } },
+    });
+    const internal = card as unknown as CardInternals;
+    vi.useFakeTimers();
+
+    applyMembership(card, {
+      'light.a': { brightness: { '100': '100' } },
+    });
+    await card.updateComplete;
+    expect(internal._membershipStatusTimer).not.toBeNull();
+
+    internal._dispatchSave({ type: 'save-start' });
+    await card.updateComplete;
+    expect(internal._membershipStatus).toBeNull();
+    expect(internal._membershipStatusTimer).toBeNull();
+    expect(card.renderRoot.querySelector('.status-stack [role="status"]')).toBeNull();
+
+    internal._dispatchSave({ type: 'save-success' });
+    internal._dispatchSave({ type: 'save-confirmed' });
+    await card.updateComplete;
+
+    const statuses = card.renderRoot.querySelectorAll('.status-stack [role="status"]');
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].textContent).toContain('Saved successfully');
+    expect(internal._membershipStatus).toBeNull();
+    expect(internal._membershipStatusTimer).toBeNull();
+  });
+
+  it('replaces an existing save success with membership confirmation', async () => {
+    const { card } = await mountCard({
+      'light.a': { brightness: { '100': '100' } },
+    });
+    const internal = card as unknown as CardInternals;
+    vi.useFakeTimers();
+
+    internal._dispatchSave({ type: 'save-start' });
+    internal._dispatchSave({ type: 'save-success' });
+    internal._dispatchSave({ type: 'save-confirmed' });
+    await card.updateComplete;
+    expect(card.renderRoot.querySelector('.status-stack [role="status"]')?.textContent).toContain(
+      'Saved successfully'
+    );
+
+    applyMembership(card, {
+      'light.a': { brightness: { '100': '100' } },
+    });
+    await card.updateComplete;
+
+    const statuses = card.renderRoot.querySelectorAll('.status-stack [role="status"]');
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].textContent).toContain('Lights updated.');
+    expect(statuses[0].textContent).not.toContain('Saved successfully');
+  });
+
+  it('replaces an existing save error with membership confirmation', async () => {
+    const { card } = await mountCard({
+      'light.a': { brightness: { '100': '100' } },
+    });
+    const internal = card as unknown as CardInternals;
+    vi.useFakeTimers();
+
+    internal._dispatchSave({ type: 'save-start' });
+    internal._dispatchSave({ type: 'save-error', message: 'Save failed. Check connection.' });
+    await card.updateComplete;
+    expect(card.renderRoot.querySelector('.status-stack .error')?.textContent).toContain(
+      'Save failed'
+    );
+
+    applyMembership(card, {
+      'light.a': { brightness: { '100': '100' } },
+    });
+    await card.updateComplete;
+
+    expect(card.renderRoot.querySelector('.status-stack .error')).toBeNull();
+    const statuses = card.renderRoot.querySelectorAll('.status-stack [role="status"]');
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].textContent).toContain('Lights updated.');
   });
 
   it('surfaces backend error message via _manageError on delete-group failure', async () => {
