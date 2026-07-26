@@ -2,6 +2,13 @@ import type { CandidateLight } from './types.js';
 
 export const CANDIDATE_STATE_METADATA_VERSION = 1 as const;
 
+/**
+ * Membership error codes the card branches on. Mirrors
+ * `custom_components/lightener_studio/const.py`; the shared fixture
+ * `tests/fixtures/candidate_lights_v1.json` is what keeps both sides honest.
+ */
+export const MEMBERSHIP_ERROR_DISABLED_ENTITY = 'disabled_entity' as const;
+
 export type CandidateMetadataMode = 'v1' | 'legacy';
 
 export interface NormalizedCandidateResponse {

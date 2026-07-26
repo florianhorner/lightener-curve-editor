@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   CANDIDATE_STATE_METADATA_VERSION,
+  MEMBERSHIP_ERROR_DISABLED_ENTITY,
   normalizeCandidateResponse,
 } from '../utils/candidate-lights.js';
 import type { Hass } from '../utils/types.js';
@@ -829,6 +830,44 @@ describe('light-membership-dialog', () => {
     primary.click();
     await settle(dialog);
     expect(callWS).toHaveBeenCalledTimes(2);
+  });
+
+  // These pin the `_errorMessage` branches the happy-path tests cannot reach.
+  // `disabled_entity` matters most: the backend always sends a `message`, so
+  // every other test for it passes through the generic `message ?? fallback`
+  // tail. Rejecting WITHOUT a message is the only assertion that proves the
+  // code branch itself is still wired.
+  it.each([
+    ['reload_failed', 'The group could not be reloaded'],
+    ['rollback_reload_failed', 'the group runtime may need attention'],
+    [MEMBERSHIP_ERROR_DISABLED_ENTITY, 'A selected light is disabled in Home Assistant'],
+  ])('maps the %s code to its own copy when the backend sends no message', async (code, copy) => {
+    const callWS = vi
+      .fn()
+      .mockResolvedValueOnce(
+        v1Response(
+          ['light.ceiling'],
+          [candidate('light.ceiling', 'Ceiling'), candidate('light.reading', 'Reading')]
+        )
+      )
+      .mockRejectedValueOnce({ code });
+    const dialog = await mount(callWS);
+
+    checkbox(dialog, 'light.reading').click();
+    await dialog.updateComplete;
+    dialog.renderRoot.querySelector<HTMLButtonElement>('.action.primary')!.click();
+    await settle(dialog);
+
+    const alert = dialog.renderRoot.querySelector<HTMLElement>('.apply-error');
+    expect(alert?.textContent).toContain(copy);
+    expect(alert?.textContent).not.toContain('Could not update lights.');
+  });
+
+  it('pins the disabled_entity code to the shared backend contract fixture', () => {
+    const contract = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
+      errors: { disabled_entity: { code: string } };
+    };
+    expect(MEMBERSHIP_ERROR_DISABLED_ENTITY).toBe(contract.errors.disabled_entity.code);
   });
 
   it('traps Tab and emits close on Escape only while the dialog is idle', async () => {

@@ -47,10 +47,18 @@ function resolvePriorStableArtifact(): StableArtifact | null {
   }
   if (!commit) return null;
 
-  const source = execFileSync('git', ['show', `${PRIOR_STABLE_TAG}:${PRIOR_STABLE_BUNDLE}`], {
-    encoding: 'utf8',
-    maxBuffer: 4 * 1024 * 1024,
-  });
+  // Guarded like rev-list above: if the bundle path ever moves, an unguarded
+  // `git show` throws a raw execFileSync error instead of reaching the
+  // "fetch the tag first" assertion that says what to actually do.
+  let source: string;
+  try {
+    source = execFileSync('git', ['show', `${PRIOR_STABLE_TAG}:${PRIOR_STABLE_BUNDLE}`], {
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+    });
+  } catch {
+    return null;
+  }
   return {
     tag: PRIOR_STABLE_TAG,
     commit,

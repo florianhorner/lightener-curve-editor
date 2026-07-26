@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import {
+  MEMBERSHIP_ERROR_DISABLED_ENTITY,
   normalizeCandidateResponse,
   sortCandidatesAtDialogOpen,
   type CandidateMetadataMode,
@@ -9,6 +10,20 @@ import {
 import { safeDefine } from '../utils/safe-define.js';
 import { UI } from '../utils/strings.js';
 import type { CandidateLight, Hass, MembershipResponse } from '../utils/types.js';
+
+interface AreaOption {
+  id: string;
+  name: string;
+}
+
+/** The single filtered pass the dialog renders from. */
+interface CandidateView {
+  visible: CandidateLight[];
+  /** Selected lights among `visible` — drives the "N of M selected shown" copy. */
+  visibleSelected: number;
+  /** Scope-matching lights hidden purely because they are hidden/disabled. */
+  exceptionalCount: number;
+}
 
 export class LightMembershipDialog extends LitElement {
   @property({ attribute: false }) hass: Hass | null = null;
@@ -36,6 +51,9 @@ export class LightMembershipDialog extends LitElement {
   private _loadSerial = 0;
   private _metadataWarningEmitted = false;
   private _resultAnnouncementTimer: ReturnType<typeof setTimeout> | null = null;
+  // Area options and the collator only change when _lights does, i.e. once per
+  // dialog open — never per render.
+  private _areaOptions: AreaOption[] = [];
 
   private _boundKeydown = (event: KeyboardEvent) => this._onKeydown(event);
   private static readonly RESULT_ANNOUNCEMENT_DELAY_MS = 250;
@@ -408,6 +426,7 @@ export class LightMembershipDialog extends LitElement {
     this._initialMemberIds = new Set();
     this._pendingSelectedIds = new Set();
     this._candidateOrder = [];
+    this._areaOptions = [];
     this._metadataMode = 'legacy';
     this._search = '';
     this._areaId = '';
@@ -489,6 +508,7 @@ export class LightMembershipDialog extends LitElement {
       this._observedOrder = response.observedControlledEntityIds;
       this._pendingSelectedIds = new Set(response.observedControlledEntityIds);
       this._metadataMode = response.metadataMode;
+      this._rebuildAreaOptions();
       this._loaded = true;
       this._loadError = null;
       this._loading = false;
@@ -542,7 +562,9 @@ export class LightMembershipDialog extends LitElement {
     const value = error as { code?: unknown; message?: unknown } | null;
     const message = typeof value?.message === 'string' && value.message ? value.message : null;
     if (value?.code === 'conflict') return UI.membership.conflictError;
-    if (value?.code === 'disabled_entity') return message ?? UI.membership.disabledError;
+    if (value?.code === MEMBERSHIP_ERROR_DISABLED_ENTITY) {
+      return message ?? UI.membership.disabledError;
+    }
     if (value?.code === 'reload_failed') return UI.membership.reloadError;
     if (value?.code === 'rollback_reload_failed') return UI.membership.rollbackError;
     return message ?? fallback;
@@ -556,9 +578,8 @@ export class LightMembershipDialog extends LitElement {
     return this._metadataMode === 'v1' && (light.hidden || light.disabled);
   }
 
-  private _matchesSearchAndArea(light: CandidateLight): boolean {
+  private _matchesSearchAndArea(light: CandidateLight, query: string): boolean {
     if (this._areaId && light.area_id !== this._areaId) return false;
-    const query = this._search.trim().toLocaleLowerCase();
     if (
       query &&
       !light.name.toLocaleLowerCase().includes(query) &&
@@ -569,10 +590,10 @@ export class LightMembershipDialog extends LitElement {
     return true;
   }
 
-  private _matchesScopeAndDiscovery(light: CandidateLight): boolean {
+  private _matchesScopeAndDiscovery(light: CandidateLight, query: string): boolean {
     return (
       (!this._currentGroupOnly || this._initialMemberIds.has(light.entity_id)) &&
-      this._matchesSearchAndArea(light)
+      this._matchesSearchAndArea(light, query)
     );
   }
 
@@ -584,29 +605,45 @@ export class LightMembershipDialog extends LitElement {
     );
   }
 
-  private get _visibleLights(): CandidateLight[] {
-    return this._lights.filter(
-      (light) =>
-        this._matchesScopeAndDiscovery(light) &&
-        (this._showExceptional || !this._isSuppressedExceptional(light))
-    );
+  /**
+   * Filter, count the visible selection, and count the suppressed exceptional
+   * rows in ONE pass. Callers compute this once per update cycle and thread the
+   * result down rather than re-deriving it per consumer.
+   *
+   * Deliberately NOT memoized. Benchmarked at 1,000 candidates the filter pass
+   * is not the cost — DOM commit of the rows is — so a cache here would buy no
+   * measurable time while adding an invalidation invariant that has to stay in
+   * lockstep with every filter input. Two honest passes beat five, and beat a
+   * cache nobody can see go stale.
+   *
+   * The query IS normalized once here rather than inside the per-light
+   * predicate, which previously re-ran `trim().toLocaleLowerCase()` per light.
+   */
+  private _computeView(): CandidateView {
+    const query = this._search.trim().toLocaleLowerCase();
+    const visible: CandidateLight[] = [];
+    let visibleSelected = 0;
+    let exceptionalCount = 0;
+    for (const light of this._lights) {
+      if (!this._matchesScopeAndDiscovery(light, query)) continue;
+      // `_isSuppressedExceptional` is v1-gated via `_isExceptional`, so this
+      // stays 0 in legacy mode without a second guard.
+      const suppressed = this._isSuppressedExceptional(light);
+      if (suppressed) exceptionalCount += 1;
+      if (this._showExceptional || !suppressed) {
+        visible.push(light);
+        if (this._pendingSelectedIds.has(light.entity_id)) visibleSelected += 1;
+      }
+    }
+    return { visible, visibleSelected, exceptionalCount };
   }
 
-  private get _matchingExceptionalHiddenCount(): number {
-    if (this._metadataMode !== 'v1' || this._showExceptional) return 0;
-    return this._lights.filter(
-      (light) => this._matchesScopeAndDiscovery(light) && this._isSuppressedExceptional(light)
-    ).length;
+  /** Area options, computed once per load in `_rebuildAreaOptions`. */
+  private get _areas(): AreaOption[] {
+    return this._areaOptions;
   }
 
-  private get _exceptionalCount(): number {
-    if (this._metadataMode !== 'v1') return 0;
-    return this._lights.filter(
-      (light) => this._matchesScopeAndDiscovery(light) && this._isSuppressedExceptional(light)
-    ).length;
-  }
-
-  private get _areas(): Array<{ id: string; name: string }> {
+  private _rebuildAreaOptions(): void {
     const seen = new Map<string, string>();
     for (const light of this._lights) {
       if (light.area_id && light.area_name) seen.set(light.area_id, light.area_name);
@@ -614,7 +651,7 @@ export class LightMembershipDialog extends LitElement {
     const collator = new Intl.Collator(this.hass?.locale?.language, {
       sensitivity: 'base',
     });
-    return [...seen]
+    this._areaOptions = [...seen]
       .map(([id, name]) => ({ id, name }))
       .sort((left, right) => collator.compare(left.name, right.name));
   }
@@ -689,8 +726,10 @@ export class LightMembershipDialog extends LitElement {
   }
 
   private _revealExceptional(): void {
+    const query = this._search.trim().toLocaleLowerCase();
     const firstRevealed = this._lights.find(
-      (light) => this._matchesScopeAndDiscovery(light) && this._isSuppressedExceptional(light)
+      (light) =>
+        this._matchesScopeAndDiscovery(light, query) && this._isSuppressedExceptional(light)
     )?.entity_id;
     this._showExceptional = true;
     this._afterNextRender('restore focus after revealing exceptional lights', () => {
@@ -723,10 +762,7 @@ export class LightMembershipDialog extends LitElement {
       this._announcedResultSummary = '';
       return;
     }
-    const visible = this._visibleLights;
-    const visibleSelected = visible.filter((light) =>
-      this._pendingSelectedIds.has(light.entity_id)
-    ).length;
+    const { visible, visibleSelected } = this._computeView();
     const summary = UI.membership.resultSummary(
       visible.length,
       visibleSelected,
@@ -843,17 +879,18 @@ export class LightMembershipDialog extends LitElement {
     }
   }
 
-  private _renderEmptyState(): TemplateResult {
+  private _renderEmptyState(view: CandidateView): TemplateResult {
     if (this._lights.length === 0) {
       return html`<div class="state-message">
         <div class="empty-copy">${UI.membership.sourceEmpty}</div>
       </div>`;
     }
-    if (this._matchingExceptionalHiddenCount > 0) {
+    // Suppressed rows are only "hidden by this filter" while the reveal
+    // toggle is off; with it on they are already in `visible`.
+    const hiddenByExceptionalFilter = this._showExceptional ? 0 : view.exceptionalCount;
+    if (hiddenByExceptionalFilter > 0) {
       return html`<div class="state-message">
-        <div class="empty-copy">
-          ${UI.membership.exceptionalEmpty(this._matchingExceptionalHiddenCount)}
-        </div>
+        <div class="empty-copy">${UI.membership.exceptionalEmpty(hiddenByExceptionalFilter)}</div>
         <button
           class="action"
           type="button"
@@ -895,7 +932,7 @@ export class LightMembershipDialog extends LitElement {
     </div>`;
   }
 
-  private _renderList(): TemplateResult {
+  private _renderList(view: CandidateView): TemplateResult {
     if (this._loading) {
       return html`<div class="state-message" role="status" aria-live="polite">
         <div class="loading-copy">${UI.membership.loading}</div>
@@ -917,8 +954,8 @@ export class LightMembershipDialog extends LitElement {
       </div>`;
     }
 
-    const visible = this._visibleLights;
-    if (visible.length === 0) return this._renderEmptyState();
+    const { visible } = view;
+    if (visible.length === 0) return this._renderEmptyState(view);
 
     return html`${repeat(
       visible,
@@ -957,10 +994,8 @@ export class LightMembershipDialog extends LitElement {
   }
 
   render() {
-    const visible = this._visibleLights;
-    const visibleSelected = visible.filter((light) =>
-      this._pendingSelectedIds.has(light.entity_id)
-    ).length;
+    const view = this._computeView();
+    const { visible, visibleSelected } = view;
     const disabled = this._loading || this._applying || !this._loaded;
     const zeroSelection = this._loaded && this._pendingSelectedIds.size === 0;
 
@@ -1049,7 +1084,7 @@ export class LightMembershipDialog extends LitElement {
                       this._showExceptional = (event.target as HTMLInputElement).checked;
                     }}
                   />
-                  <span>${UI.membership.showExceptional(this._exceptionalCount)}</span>
+                  <span>${UI.membership.showExceptional(view.exceptionalCount)}</span>
                 </label>`
               : nothing}
           </div>
@@ -1078,7 +1113,7 @@ export class LightMembershipDialog extends LitElement {
           aria-label=${UI.membership.candidateList}
           aria-busy=${this._loading ? 'true' : 'false'}
         >
-          ${this._renderList()}
+          ${this._renderList(view)}
         </div>
 
         <footer>
