@@ -56,6 +56,7 @@
       "self_reference": "Eine Lightener-Gruppe kann sich nicht selbst steuern.",
       "recursive_lightener": "Eine Lightener-Gruppe kann keine andere Lightener-Gruppe steuern.",
       "not_found": "Eine ausgew\u00e4hlte Lampe ist nicht mehr vorhanden.",
+      "disabled_entity": "Eine ausgew\u00e4hlte Lampe ist in Home Assistant deaktiviert. Aktiviere sie unter Einstellungen \u2192 Ger\u00e4te & Dienste \u2192 Entit\u00e4ten, \u00f6ffne dieses Formular erneut und versuche es noch einmal.",
       "invalid_brightness": "Ung\u00fcltiger Eintrag \"{error_entry}\". Format \"X:Y\" verwenden, wobei X 1\u2013100 und Y 0\u2013100 ist, z.\u00a0B. \"40:100\""
     },
     "create_entry": {
@@ -101,6 +102,7 @@
       "reload_failed": "Die Gruppe konnte nicht neu geladen werden. Die vorige Auswahl wurde wiederhergestellt.",
       "rollback_reload_failed": "Die Aktualisierung ist fehlgeschlagen und der vorherige Laufzeitstatus konnte nicht wiederhergestellt werden. \u00d6ffne Integrationen, um es erneut zu versuchen.",
       "not_found": "Eine ausgew\u00e4hlte Lampe ist nicht mehr vorhanden.",
+      "disabled_entity": "Eine ausgew\u00e4hlte Lampe ist in Home Assistant deaktiviert. Aktiviere sie unter Einstellungen \u2192 Ger\u00e4te & Dienste \u2192 Entit\u00e4ten, \u00f6ffne dieses Formular erneut und versuche es noch einmal.",
       "not_a_light": "Eine Auswahl ist keine Lampen-Entit\u00e4t.",
       "self_reference": "Eine Lightener-Gruppe kann sich nicht selbst steuern.",
       "recursive_lightener": "Eine Lightener-Gruppe kann keine andere Lightener-Gruppe steuern.",

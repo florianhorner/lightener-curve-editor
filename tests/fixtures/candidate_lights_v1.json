@@ -1,0 +1,117 @@
+{
+  "capabilities": {
+    "candidate_state_metadata": 1
+  },
+  "errors": {
+    "disabled_entity": {
+      "code": "disabled_entity",
+      "message_template": "Could not add {entity_id} because it is disabled in Home Assistant. Enable it under Settings → Devices & services → Entities, reopen Edit lights, and try again."
+    }
+  },
+  "observed_controlled_entity_ids": [
+    "light.disabled_retained",
+    "light.missing_retained"
+  ],
+  "lights": [
+    {
+      "entity_id": "light.disabled_new",
+      "name": "light.disabled_new",
+      "available": false,
+      "area_id": null,
+      "area_name": null,
+      "hidden": false,
+      "disabled": true,
+      "missing": false
+    },
+    {
+      "entity_id": "light.disabled_retained",
+      "name": "light.disabled_retained",
+      "available": false,
+      "area_id": null,
+      "area_name": null,
+      "hidden": false,
+      "disabled": true,
+      "missing": false
+    },
+    {
+      "entity_id": "light.hidden",
+      "name": "light.hidden",
+      "available": true,
+      "area_id": null,
+      "area_name": null,
+      "hidden": true,
+      "disabled": false,
+      "missing": false
+    },
+    {
+      "entity_id": "light.hidden_disabled",
+      "name": "light.hidden_disabled",
+      "available": false,
+      "area_id": null,
+      "area_name": null,
+      "hidden": true,
+      "disabled": true,
+      "missing": false
+    },
+    {
+      "entity_id": "light.hidden_unavailable",
+      "name": "light.hidden_unavailable",
+      "available": false,
+      "area_id": null,
+      "area_name": null,
+      "hidden": true,
+      "disabled": false,
+      "missing": false
+    },
+    {
+      "entity_id": "light.missing_retained",
+      "name": "light.missing_retained",
+      "available": false,
+      "area_id": null,
+      "area_name": null,
+      "hidden": false,
+      "disabled": false,
+      "missing": true
+    },
+    {
+      "entity_id": "light.ordinary",
+      "name": "light.ordinary",
+      "available": true,
+      "area_id": null,
+      "area_name": null,
+      "hidden": false,
+      "disabled": false,
+      "missing": false
+    },
+    {
+      "entity_id": "light.registry_only",
+      "name": "light.registry_only",
+      "available": false,
+      "area_id": null,
+      "area_name": null,
+      "hidden": false,
+      "disabled": false,
+      "missing": false
+    },
+    {
+      "entity_id": "light.state_only",
+      "name": "light.state_only",
+      "available": true,
+      "area_id": null,
+      "area_name": null,
+      "hidden": false,
+      "disabled": false,
+      "missing": false
+    },
+    {
+      "entity_id": "light.unavailable",
+      "name": "light.unavailable",
+      "available": false,
+      "area_id": null,
+      "area_name": null,
+      "hidden": false,
+      "disabled": false,
+      "missing": false
+    }
+  ]
+}

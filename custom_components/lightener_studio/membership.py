@@ -13,8 +13,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_BRIGHTNESS, CONF_ENTITIES
 from homeassistant.core import HomeAssistant
 
-from .const import DEFAULT_BRIGHTNESS, DOMAIN
-from .entity_selection import is_lightener_light_entity
+from .const import (
+    DEFAULT_BRIGHTNESS,
+    DOMAIN,
+    MEMBERSHIP_ERROR_DISABLED_ENTITY,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,16 +89,6 @@ def discard_membership_lock(hass: HomeAssistant, entry_id: str) -> None:
     locks.pop(entry_id, None)
 
 
-def _controlled_light_exists(hass: HomeAssistant, entity_id: str) -> bool:
-    """Return whether a controlled light currently exists in HA."""
-    from homeassistant.helpers.entity_registry import async_get
-
-    return (
-        async_get(hass).async_get(entity_id) is not None
-        or hass.states.get(entity_id) is not None
-    )
-
-
 def validate_membership_selection(
     hass: HomeAssistant,
     group_entity_id: str,
@@ -103,6 +96,8 @@ def validate_membership_selection(
     controlled_entity_ids: Sequence[str],
 ) -> None:
     """Validate the full submitted membership set."""
+    from homeassistant.helpers.entity_registry import async_get
+
     if not controlled_entity_ids:
         raise MembershipError("empty_selection", "Select at least one light")
     if len(controlled_entity_ids) > MAX_CONTROLLED_LIGHTS:
@@ -113,20 +108,39 @@ def validate_membership_selection(
     if len(set(controlled_entity_ids)) != len(controlled_entity_ids):
         raise MembershipError("duplicate", "The light selection contains a duplicate")
 
+    entity_registry = async_get(hass)
     for entity_id in controlled_entity_ids:
         if not entity_id.startswith("light."):
             raise MembershipError("not_a_light", f"{entity_id} is not a light entity")
         if entity_id == group_entity_id:
             raise MembershipError("self_reference", "A Lightener cannot control itself")
-        if is_lightener_light_entity(hass, entity_id):
+        registry_entry = entity_registry.async_get(entity_id)
+        if (
+            registry_entry is not None
+            and registry_entry.platform == DOMAIN
+            and registry_entry.domain == "light"
+        ):
             raise MembershipError(
                 "recursive_lightener",
                 "A Lightener group cannot control another Lightener group",
             )
-        # Existing stale members remain retainable. Newly added IDs must exist.
-        if entity_id not in existing_entities and not _controlled_light_exists(
-            hass, entity_id
-        ):
+        if entity_id in existing_entities:
+            # Persisted members remain retainable even if HA disabled or removed
+            # them. Only a new membership grant is rejected below.
+            continue
+
+        if registry_entry is not None and registry_entry.disabled_by is not None:
+            raise MembershipError(
+                MEMBERSHIP_ERROR_DISABLED_ENTITY,
+                (
+                    f"Could not add {entity_id} because it is disabled in Home Assistant. "
+                    "Enable it under Settings → Devices & services → "
+                    "Entities, reopen Edit lights, and try again."
+                ),
+            )
+
+        # Existing stale members were handled above. Newly added IDs must exist.
+        if registry_entry is None and hass.states.get(entity_id) is None:
             raise MembershipError(
                 "not_found", f"Light entity {entity_id} was not found"
             )

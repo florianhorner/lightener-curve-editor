@@ -101,7 +101,9 @@ export class SaveConfirmGuard {
     this._clearSuccessTimer();
     this._successTimer = setTimeout(() => {
       this._successTimer = null;
-      this._host.dispatchSave({ type: 'save-clear' });
+      if (this._host.getSavePhase() === 'saved') {
+        this._host.dispatchSave({ type: 'save-clear' });
+      }
     }, this._successDisplayMs);
   }
 

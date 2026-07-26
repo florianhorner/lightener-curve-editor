@@ -70,6 +70,7 @@ const GRAPH_PANEL_INLINE_PADDING_PX = 28;
 const FOOTER_OVERLAY_VISIBILITY_TOLERANCE_PX = 1;
 const FOOTER_OVERLAY_MIN_HIDDEN_RATIO = 1;
 const FIRST_RUN_SHIMMER_STEP_MS = 1350;
+const MEMBERSHIP_STATUS_DURATION_MS = 2000;
 const CURVE_STACK_DEFAULT_MAX_WIDTH_PX = Number(
   (DEFAULT_CURVE_GRAPH_MAX_HEIGHT_PX * (VB_W / VB_H) + GRAPH_PANEL_INLINE_PADDING_PX).toFixed(2)
 );
@@ -350,6 +351,9 @@ export class LightenerCurveCard extends LitElement {
   private _dispatchSave(action: Parameters<typeof reduceSave>[1]): void {
     const leftConfirming = this._saveState.phase === 'confirming';
     this._saveState = reduceSave(this._saveState, action);
+    if (action.type === 'save-start' && this._saveState.phase === 'saving') {
+      this._clearMembershipStatus();
+    }
     if (this._saveState.phase !== 'confirming') {
       // Leaving (or already out of) the confirming phase: the guard clears its
       // confirm timer and, when we just left, settles any pending saveCurves()
@@ -380,6 +384,8 @@ export class LightenerCurveCard extends LitElement {
   @state() private _previewActive = false;
   @state() private _presetGraphTrial: PresetDef | null = null;
   @state() private _membershipOpen = false;
+  @state() private _membershipStatus: string | null = null;
+  private _membershipStatusTimer: number | null = null;
   @state() private _coachPhase:
     | 'inactive'
     | 'choose_shape'
@@ -1057,6 +1063,7 @@ export class LightenerCurveCard extends LitElement {
     const firstRun = config.firstRun === true;
     this._config = config;
     if (entityChanged) {
+      this._clearMembershipStatus();
       if (this._previewActive) this._stopPreview();
       this._setMembershipOpen(false);
       this._dragActive = false;
@@ -1242,6 +1249,7 @@ export class LightenerCurveCard extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._clearMembershipStatus();
     if (this._previewActive) this._stopPreview();
     this._clearPresetGraphTrial();
     this._setMembershipOpen(false);
@@ -2115,17 +2123,26 @@ export class LightenerCurveCard extends LitElement {
     this._clearPresetGraphTrial();
     if (this._previewActive) this._stopPreview();
     this._manageError = null;
+    this._clearMembershipStatus();
     this._setMembershipOpen(true);
   }
 
   private _closeMembershipEditor(): void {
     this._setMembershipOpen(false);
-    queueMicrotask(() => {
+    void (async () => {
+      await this.updateComplete;
+      if (this._membershipOpen) return;
       const legend = this.renderRoot.querySelector('curve-legend') as
-        | (HTMLElement & { renderRoot?: ShadowRoot })
+        | (HTMLElement & { renderRoot?: ShadowRoot; updateComplete?: Promise<boolean> })
         | null;
+      await legend?.updateComplete;
+      if (this._membershipOpen || !this.isConnected) return;
       legend?.renderRoot?.querySelector<HTMLButtonElement>('.add-light-btn')?.focus();
-    });
+    })().catch((err: unknown) => this._reportMembershipFocusRestoreError(err));
+  }
+
+  private _reportMembershipFocusRestoreError(err: unknown): void {
+    console.warn('[Lightener] Could not restore focus after closing Edit lights:', err);
   }
 
   private _onMembershipApplied(event: CustomEvent): void {
@@ -2157,7 +2174,34 @@ export class LightenerCurveCard extends LitElement {
         selectedCurveId: this._selectedCurveId,
       });
     }
+    this._showMembershipStatus();
     this._closeMembershipEditor();
+  }
+
+  private _showMembershipStatus(): void {
+    this._clearMembershipStatus();
+    // Retire a stale success banner so it can't stack with "Lights updated."
+    // An `error` banner is NOT ours to retire: `reset` maps to `idle`
+    // unconditionally, so clearing it here would swap an unacknowledged curve
+    // save failure for a success toast the user never earned. A membership
+    // update succeeding says nothing about the curve save that failed, and the
+    // error carries the only Retry affordance. Both banners stay.
+    if (this._saveState.phase !== 'error') {
+      this._dispatchSave({ type: 'reset' });
+    }
+    this._membershipStatus = UI.membership.updated;
+    this._membershipStatusTimer = window.setTimeout(() => {
+      this._membershipStatusTimer = null;
+      this._membershipStatus = null;
+    }, MEMBERSHIP_STATUS_DURATION_MS);
+  }
+
+  private _clearMembershipStatus(): void {
+    if (this._membershipStatusTimer !== null) {
+      window.clearTimeout(this._membershipStatusTimer);
+      this._membershipStatusTimer = null;
+    }
+    this._membershipStatus = null;
   }
 
   private _setMembershipOpen(open: boolean): void {
@@ -2493,6 +2537,11 @@ export class LightenerCurveCard extends LitElement {
           : nothing}
 
         <div class="status-stack">
+          ${this._membershipStatus
+            ? html`<div class="success" role="status" aria-live="polite">
+                ${this._membershipStatus}
+              </div>`
+            : nothing}
           ${this._saveSuccess
             ? html`<div class="success" role="status" aria-live="polite">
                 <svg

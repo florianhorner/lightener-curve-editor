@@ -45,7 +45,7 @@ Lightener lets one control drive many lights at once. Lightener Studio adds the 
 ## Highlights
 
 - **Drag control points** on smooth curves to shape each light's brightness response.
-- **Live light preview** — the Preview button pushes real brightness to your lights while you shape, and the scrubber pushes live brightness too. Lights ease smoothly between levels where they support transitions, and restore automatically when you stop.
+- **Live light preview** — **Watch room react** pushes real brightness to your lights while you shape, and the scrubber pushes live brightness too. Lights ease smoothly between levels where they support transitions, and restore automatically when you stop.
 - **Brightness scrubber with graph sync** — drag to preview every light's output at any level; a vertical indicator and per-curve dots track on the graph.
 - **One-click presets** — Equal brightness, Dim accent, Late starter, Night mode, applied to one light or all, fully undoable.
 - **Sidebar panel** — pick a Lightener group and edit curves without adding a dashboard card first.
@@ -102,7 +102,158 @@ Home Assistant connection; write commands additionally require an admin user.
 | `lightener/remove_light` | `entity_id`, `controlled_entity_id` | admin | Legacy single-light remove, superseded by `set_controlled_lights`. |
 | `lightener/resolve_handoff` | `token` | admin | Exchange a config-flow handoff token for the new group's editor URL. |
 
-From the browser console while logged into Home Assistant, run this authenticated request:
+### Candidate metadata v1
+
+`lightener/list_candidate_lights` is the authoritative read for the Edit lights
+dialog. From the browser console while logged into Home Assistant:
+
+```js
+const hass = document.querySelector("home-assistant").hass;
+const candidates = await hass.callWS({
+  type: "lightener/list_candidate_lights",
+  entity_id: "light.my_lightener_group",
+});
+console.log(candidates);
+```
+
+A version-1 response has this shape:
+
+```json
+{
+  "capabilities": {
+    "candidate_state_metadata": 1
+  },
+  "observed_controlled_entity_ids": [
+    "light.ceiling",
+    "light.retired_lamp"
+  ],
+  "lights": [
+    {
+      "entity_id": "light.ceiling",
+      "name": "Ceiling",
+      "available": true,
+      "area_id": "living_room",
+      "area_name": "Living room",
+      "hidden": false,
+      "disabled": false,
+      "missing": false
+    },
+    {
+      "entity_id": "light.utility_lamp",
+      "name": "Utility lamp",
+      "available": false,
+      "area_id": "garage",
+      "area_name": "Garage",
+      "hidden": true,
+      "disabled": true,
+      "missing": false
+    },
+    {
+      "entity_id": "light.retired_lamp",
+      "name": "Retired lamp",
+      "available": false,
+      "area_id": null,
+      "area_name": null,
+      "hidden": false,
+      "disabled": false,
+      "missing": true
+    }
+  ]
+}
+```
+
+Version 1 is all-or-nothing:
+
+- `capabilities.candidate_state_metadata` is the integer `1`.
+- Every light owns boolean `hidden`, `disabled`, and `missing` fields. `false` is
+  explicit; omission is not a default.
+- `hidden` and `disabled` come from Home Assistant's entity registry.
+  `available` reports whether the current state exists and is not
+  `unavailable`.
+- `missing` is true only for a member that was in the group when the dialog
+  opened and now has neither a registry entry nor a state. A registry-only light
+  is unavailable, not missing; a state-only light is an ordinary candidate.
+- Current and stale members stay in `lights`, even when hidden, disabled,
+  unavailable, or missing. Overlapping states are valid and their labels
+  combine.
+
+The picker defaults are deliberately conservative:
+
+| Candidate at dialog open | Default visibility | May be selected? |
+|---|---|---|
+| Ordinary or unavailable | visible | yes |
+| Hidden, disabled, or both; not a current member | hidden until **Show hidden & disabled** | hidden: yes; disabled: no |
+| Hidden, disabled, unavailable, or missing current member | visible | may be retained, removed, and reselected |
+
+**Current group only (N)** uses the immutable membership snapshot from dialog
+open. Unchecking a current member does not make its row disappear, and a newly
+checked candidate remains in the All view. Search, area, disclosure, and scope
+filters change only what is visible; they never change the submitted member
+set.
+
+### Version skew and invalid metadata
+
+| Frontend | Backend response | Behavior |
+|---|---|---|
+| Current | v1 marker and complete boolean fields | Full exceptional-state filtering and labels |
+| Current | Marker absent | Expected legacy mode: all candidates remain visible; no disclosure control or console warning |
+| Current | Marker unknown/malformed, or any v1 row incomplete | Whole-response legacy mode; all candidates remain visible and one deduplicated developer-console warning explains the fallback |
+| Prior stable | Current v1 backend | Unknown response fields are ignored; existing membership behavior remains |
+
+The fallback is for visibility only. The backend remains authoritative for
+writes, including requests from cached or prior frontend bundles. Payload mocks
+are contract simulation; a binary-skew claim must name the immutable frontend
+tag and commit that were actually loaded.
+
+### Membership writes and stable errors
+
+Use writes only as an administrator and only against a disposable group: the
+following call changes that group's controlled lights.
+
+```js
+const hass = document.querySelector("home-assistant").hass;
+const snapshot = await hass.callWS({
+  type: "lightener/list_candidate_lights",
+  entity_id: "light.membership_proof",
+});
+
+await hass.callWS({
+  type: "lightener/set_controlled_lights",
+  entity_id: "light.membership_proof",
+  controlled_entity_ids: [
+    ...snapshot.observed_controlled_entity_ids,
+    "light.living_room_ceiling_leds",
+  ],
+  observed_controlled_entity_ids: snapshot.observed_controlled_entity_ids,
+});
+```
+
+The batch command returns `entities`, `added_entity_ids`, and
+`removed_entity_ids`. It preserves retained members before newly added members
+and rejects stale observations rather than overwriting a concurrent edit.
+
+| Error code | Meaning and recovery |
+|---|---|
+| `conflict` | The group changed after the client loaded it. Reopen Edit lights and retry from the new snapshot. |
+| `disabled_entity` | A newly added entity is disabled. Enable it under **Settings → Devices & services → Entities**, reopen Edit lights, and retry. |
+| `empty_selection` / `too_many` / `duplicate` | The desired member list violates the batch-selection contract. Correct the payload and retry. |
+| `not_a_light` / `self_reference` / `recursive_lightener` / `not_found` | A submitted ID is not an eligible controlled light. Refresh candidates and correct the ID. |
+| `reload_failed` / `rollback_reload_failed` | Home Assistant could not apply or fully restore the runtime. Keep the dialog state, inspect integration logs, and retry only after the runtime is healthy. |
+
+`disabled_entity` is checked again inside the membership lock, so a light
+disabled after the dialog loaded is still rejected. The exact backend message
+is intentionally actionable for cached clients that do not know the new code:
+
+> Could not add `{entity_id}` because it is disabled in Home Assistant. Enable it under Settings → Devices & services → Entities, reopen Edit lights, and try again.
+
+The current frontend presents friendly recovery, preserves pending selection
+and filters, focuses the error, and offers **Try again**. Home Assistant's
+config/options flow errors are localized separately. A prior stable frontend
+displays the raw backend message above.
+
+### Reading curves
+
+For comparison, this authenticated read works for any user:
 
 ```js
 const hass = document.querySelector("home-assistant").hass;

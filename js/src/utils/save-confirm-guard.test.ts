@@ -135,6 +135,21 @@ describe('SaveConfirmGuard — confirm', () => {
     const clears = host.types().filter((t) => t === 'save-clear');
     expect(clears).toHaveLength(1);
   });
+
+  it('an older success timer cannot clear a newer save error', async () => {
+    const { host, guard } = makeGuard();
+    const first = enterConfirmingAndArm(host, guard);
+    guard.confirm(first.generation); // arms success timer #1, phase → saved
+
+    host.dispatchSave({ type: 'reset' }); // another status takes precedence
+    host.dispatchSave({ type: 'save-start' });
+    host.dispatchSave({ type: 'save-error', message: 'New save failed.' });
+
+    await vi.advanceTimersByTimeAsync(SAVE_SUCCESS_DISPLAY_MS);
+
+    expect(host.state).toEqual({ phase: 'error', message: 'New save failed.' });
+    expect(host.types()).not.toContain('save-clear');
+  });
 });
 
 describe('SaveConfirmGuard — fail', () => {

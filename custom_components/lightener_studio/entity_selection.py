@@ -80,9 +80,3 @@ def eligible_controlled_light_entity_ids(
     return sorted(
         entity_id for entity_id in candidate_ids if entity_id not in lightener_entities
     )
-
-
-def is_lightener_light_entity(hass: HomeAssistant, entity_id: str) -> bool:
-    """Return whether an entity ID belongs to a Lightener light entity."""
-    entry = async_get_entity_registry(hass).async_get(entity_id)
-    return entry is not None and entry.platform == DOMAIN and entry.domain == "light"

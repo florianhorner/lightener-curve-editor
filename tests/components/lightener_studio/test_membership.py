@@ -1,20 +1,60 @@
 """Tests for transactional controlled-light membership."""
 
 import asyncio
+import json
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
+from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.entity_registry import (
+    RegistryEntryDisabler,
+    RegistryEntryHider,
+)
+from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lightener_studio.config_flow import LightenerConfigFlow
-from custom_components.lightener_studio.const import DOMAIN
+from custom_components.lightener_studio.const import (
+    DOMAIN,
+    MEMBERSHIP_ERROR_DISABLED_ENTITY,
+)
 from custom_components.lightener_studio.membership import (
+    MembershipError,
     MembershipUpdate,
     _membership_lock,
+    async_set_controlled_lights,
+    validate_membership_selection,
 )
+
+CANDIDATE_FIXTURE_PATH = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "candidate_lights_v1.json"
+)
+CANDIDATE_CONTRACT = json.loads(CANDIDATE_FIXTURE_PATH.read_text(encoding="utf-8"))
+DISABLED_ENTITY_ERROR = CANDIDATE_CONTRACT["errors"]["disabled_entity"]
+DISABLED_ENTITY_MESSAGE = DISABLED_ENTITY_ERROR["message_template"].replace(
+    "{entity_id}", "light.test2"
+)
+
+
+def _membership_update_barrier() -> tuple[
+    asyncio.Event, Callable[..., Awaitable[MembershipUpdate]]
+]:
+    """Signal when a websocket handler reaches the membership transaction."""
+    entered = asyncio.Event()
+
+    async def instrumented_update(*args: Any, **kwargs: Any) -> MembershipUpdate:
+        entered.set()
+        return await async_set_controlled_lights(*args, **kwargs)
+
+    return entered, instrumented_update
 
 
 async def _setup_lightener(hass: HomeAssistant, entities: dict) -> MockConfigEntry:
@@ -28,6 +68,30 @@ async def _setup_lightener(hass: HomeAssistant, entities: dict) -> MockConfigEnt
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     return entry
+
+
+def _register_fixture_light(
+    hass: HomeAssistant,
+    entity_id: str,
+    *,
+    disabled: bool = False,
+    hidden: bool = False,
+) -> None:
+    """Create one registry-backed light with optional exceptional state."""
+    entity_registry = async_get_entity_registry(hass)
+    entry = entity_registry.async_get_or_create(
+        domain="light",
+        platform="candidate_fixture",
+        unique_id=entity_id,
+        suggested_object_id=entity_id.removeprefix("light."),
+    )
+    assert entry.entity_id == entity_id
+    if disabled or hidden:
+        entity_registry.async_update_entity(
+            entity_id,
+            disabled_by=RegistryEntryDisabler.USER if disabled else None,
+            hidden_by=RegistryEntryHider.USER if hidden else None,
+        )
 
 
 async def test_batch_update_preserves_payloads_and_reports_delta(
@@ -296,6 +360,465 @@ async def test_candidate_list_includes_area_and_current_stale_member(
     by_id = {item["entity_id"]: item for item in result["result"]["lights"]}
     assert by_id["light.test1"]["area_name"] == "Studio"
     assert by_id["light.retired_but_kept"]["available"] is False
+    assert by_id["light.retired_but_kept"]["missing"] is True
+
+
+async def test_candidate_list_matches_shared_v1_state_fixture(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """The backend emits the complete, versioned candidate-state contract."""
+    expected = CANDIDATE_CONTRACT
+
+    for entity_id in (
+        "light.disabled_new",
+        "light.disabled_retained",
+        "light.hidden",
+        "light.hidden_disabled",
+        "light.hidden_unavailable",
+        "light.ordinary",
+        "light.registry_only",
+        "light.unavailable",
+    ):
+        _register_fixture_light(
+            hass,
+            entity_id,
+            disabled=entity_id
+            in {
+                "light.disabled_new",
+                "light.disabled_retained",
+                "light.hidden_disabled",
+            },
+            hidden=entity_id
+            in {
+                "light.hidden",
+                "light.hidden_disabled",
+                "light.hidden_unavailable",
+            },
+        )
+
+    for entity_id, state in (
+        ("light.hidden", "on"),
+        ("light.hidden_unavailable", STATE_UNAVAILABLE),
+        ("light.ordinary", "on"),
+        ("light.state_only", "on"),
+        ("light.unavailable", STATE_UNAVAILABLE),
+    ):
+        attributes = {"friendly_name": 42} if entity_id == "light.state_only" else None
+        hass.states.async_set(entity_id, state, attributes)
+
+    await _setup_lightener(
+        hass,
+        {
+            entity_id: {"brightness": {"100": "100"}}
+            for entity_id in expected["observed_controlled_entity_ids"]
+        },
+    )
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 60,
+            "type": "lightener/list_candidate_lights",
+            "entity_id": "light.membership",
+        }
+    )
+    response = await ws.receive_json()
+
+    assert response["success"] is True
+    result = response["result"]
+    assert result["capabilities"] == expected["capabilities"]
+    assert (
+        result["observed_controlled_entity_ids"]
+        == expected["observed_controlled_entity_ids"]
+    )
+
+    expected_by_id = {item["entity_id"]: item for item in expected["lights"]}
+    actual_by_id = {item["entity_id"]: item for item in result["lights"]}
+    test_harness_ids = {
+        "light.test1",
+        "light.test2",
+        "light.test_onoff",
+        "light.test_temp",
+    }
+    assert set(actual_by_id) == set(expected_by_id) | test_harness_ids
+    assert {
+        entity_id: actual_by_id[entity_id] for entity_id in expected_by_id
+    } == expected_by_id
+    assert actual_by_id["light.state_only"]["name"] == "light.state_only"
+    assert all(isinstance(item["name"], str) for item in result["lights"])
+    assert all(
+        type(item[field]) is bool
+        for item in result["lights"]
+        for field in ("hidden", "disabled", "missing")
+    )
+
+
+async def test_candidate_list_resolves_registries_once_per_request(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Candidate serialization reuses one registry snapshot for every row."""
+    await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    ws = await hass_ws_client(hass)
+
+    with (
+        patch(
+            "custom_components.lightener_studio.websocket.async_get_entity_registry",
+            wraps=async_get_entity_registry,
+        ) as get_entity_registry,
+        patch(
+            "custom_components.lightener_studio.websocket.dr.async_get",
+            wraps=dr.async_get,
+        ) as get_device_registry,
+        patch(
+            "custom_components.lightener_studio.websocket.ar.async_get",
+            wraps=ar.async_get,
+        ) as get_area_registry,
+    ):
+        await ws.send_json(
+            {
+                "id": 66,
+                "type": "lightener/list_candidate_lights",
+                "entity_id": "light.membership",
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is True
+    # One entity-registry resolution identifies the Lightener group; the other
+    # serves every candidate row. Device and area registries are each hoisted.
+    assert get_entity_registry.call_count == 2
+    get_device_registry.assert_called_once_with(hass)
+    get_area_registry.assert_called_once_with(hass)
+
+
+async def test_membership_validation_reads_each_registry_entry_once(
+    hass: HomeAssistant,
+) -> None:
+    """Validation reuses each entry for recursion, retention, and disable checks."""
+    for entity_id in ("light.lookup_retained", "light.lookup_new"):
+        _register_fixture_light(hass, entity_id)
+
+    entity_registry = async_get_entity_registry(hass)
+    registry_type = type(entity_registry)
+    original_async_get = registry_type.async_get
+    with patch.object(
+        registry_type,
+        "async_get",
+        autospec=True,
+        side_effect=original_async_get,
+    ) as async_get_entry:
+        validate_membership_selection(
+            hass,
+            "light.membership",
+            {"light.lookup_retained": {"brightness": {"100": "100"}}},
+            ["light.lookup_retained", "light.lookup_new"],
+        )
+
+    assert [call.args[1] for call in async_get_entry.call_args_list] == [
+        "light.lookup_retained",
+        "light.lookup_new",
+    ]
+
+
+async def test_membership_validation_rejects_a_nested_lightener_group(
+    hass: HomeAssistant,
+) -> None:
+    """A Lightener-platform light is rejected before it can nest a group."""
+    entity_registry = async_get_entity_registry(hass)
+    nested = entity_registry.async_get_or_create(
+        domain="light",
+        platform=DOMAIN,
+        unique_id="nested-group",
+        suggested_object_id="nested_group",
+    )
+    assert nested.entity_id == "light.nested_group"
+    # A same-platform NON-light entity is rejected as not_a_light, not as
+    # recursion. Note this does NOT pin the guard's `domain == "light"`
+    # conjunct: RegistryEntry.domain is split_entity_id(entity_id)[0], so behind
+    # the earlier startswith("light.") check that conjunct is always true.
+    # It is harmless defence-in-depth, not a load-bearing condition.
+    sibling_sensor = entity_registry.async_get_or_create(
+        domain="sensor",
+        platform=DOMAIN,
+        unique_id="group-diagnostic",
+        suggested_object_id="group_diagnostic",
+    )
+    assert sibling_sensor.entity_id == "sensor.group_diagnostic"
+
+    with pytest.raises(MembershipError) as excinfo:
+        validate_membership_selection(
+            hass,
+            "light.membership",
+            {"light.test1": {"brightness": {"100": "100"}}},
+            ["light.test1", "light.nested_group"],
+        )
+
+    assert excinfo.value.code == "recursive_lightener"
+
+    # The sensor is rejected for not being a light, NOT for recursion — proof the
+    # domain conjunct is what separates the two paths.
+    with pytest.raises(MembershipError) as sensor_excinfo:
+        validate_membership_selection(
+            hass,
+            "light.membership",
+            {"light.test1": {"brightness": {"100": "100"}}},
+            ["light.test1", "sensor.group_diagnostic"],
+        )
+
+    assert sensor_excinfo.value.code == "not_a_light"
+
+
+async def test_batch_rejects_nested_lightener_group_without_mutation(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """The recursion guard surfaces over the wire and never mutates the entry."""
+    entry = await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    entity_registry = async_get_entity_registry(hass)
+    nested = entity_registry.async_get_or_create(
+        domain="light",
+        platform=DOMAIN,
+        unique_id="nested-group",
+        suggested_object_id="nested_group",
+    )
+
+    ws = await hass_ws_client(hass)
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock
+    ) as reload_entry:
+        await ws.send_json(
+            {
+                "id": 64,
+                "type": "lightener/set_controlled_lights",
+                "entity_id": "light.membership",
+                "observed_controlled_entity_ids": ["light.test1"],
+                "controlled_entity_ids": ["light.test1", nested.entity_id],
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "recursive_lightener"
+    assert list(entry.data["entities"]) == ["light.test1"]
+    reload_entry.assert_not_awaited()
+
+
+async def test_candidate_list_inherits_area_from_device(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """A light with no entity-level area reports its device's area."""
+    entry = await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    area = ar.async_get(hass).async_create("Hallway")
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "device-area-fixture")},
+    )
+    dr.async_get(hass).async_update_device(device.id, area_id=area.id)
+    entity_registry = async_get_entity_registry(hass)
+    inherited = entity_registry.async_get_or_create(
+        domain="light",
+        platform="candidate_fixture",
+        unique_id="device-area-light",
+        suggested_object_id="device_area_light",
+        device_id=device.id,
+    )
+    assert inherited.area_id is None
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 65,
+            "type": "lightener/list_candidate_lights",
+            "entity_id": "light.membership",
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is True
+    by_id = {item["entity_id"]: item for item in result["result"]["lights"]}
+    assert by_id[inherited.entity_id]["area_id"] == area.id
+    assert by_id[inherited.entity_id]["area_name"] == "Hallway"
+
+
+async def test_batch_rejects_new_disabled_member_without_mutation(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Batch writes reject a disabled member with stable actionable detail."""
+    entry = await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    entity_registry = async_get_entity_registry(hass)
+    entity_registry.async_update_entity(
+        "light.test2", disabled_by=RegistryEntryDisabler.USER
+    )
+
+    ws = await hass_ws_client(hass)
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock
+    ) as reload_entry:
+        await ws.send_json(
+            {
+                "id": 61,
+                "type": "lightener/set_controlled_lights",
+                "entity_id": "light.membership",
+                "observed_controlled_entity_ids": ["light.test1"],
+                "controlled_entity_ids": ["light.test1", "light.test2"],
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"] == {
+        "code": DISABLED_ENTITY_ERROR["code"],
+        "message": DISABLED_ENTITY_MESSAGE,
+    }
+    assert DISABLED_ENTITY_ERROR["code"] == MEMBERSHIP_ERROR_DISABLED_ENTITY
+    assert list(entry.data["entities"]) == ["light.test1"]
+    reload_entry.assert_not_awaited()
+
+
+async def test_initial_disabled_member_is_retainable_and_removable(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Persisted disabled members keep grandfathered retain/remove rights."""
+    entry = await _setup_lightener(
+        hass,
+        {
+            "light.test1": {"brightness": {"100": "100"}},
+            "light.test2": {"brightness": {"100": "80"}},
+        },
+    )
+    entity_registry = async_get_entity_registry(hass)
+    entity_registry.async_update_entity(
+        "light.test1", disabled_by=RegistryEntryDisabler.USER
+    )
+
+    ws = await hass_ws_client(hass)
+    with patch.object(
+        hass.config_entries,
+        "async_reload",
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as reload_entry:
+        await ws.send_json(
+            {
+                "id": 62,
+                "type": "lightener/set_controlled_lights",
+                "entity_id": "light.membership",
+                "observed_controlled_entity_ids": ["light.test1", "light.test2"],
+                "controlled_entity_ids": ["light.test1", "light.test2"],
+            }
+        )
+        retained = await ws.receive_json()
+        await ws.send_json(
+            {
+                "id": 63,
+                "type": "lightener/set_controlled_lights",
+                "entity_id": "light.membership",
+                "observed_controlled_entity_ids": ["light.test1", "light.test2"],
+                "controlled_entity_ids": ["light.test2"],
+            }
+        )
+        removed = await ws.receive_json()
+
+    assert retained["success"] is True
+    assert removed["success"] is True
+    assert removed["result"]["removed_entity_ids"] == ["light.test1"]
+    assert list(entry.data["entities"]) == ["light.test2"]
+    assert reload_entry.await_count == 2
+
+
+async def test_batch_rechecks_disabled_state_after_waiting_for_lock(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """An enabled-at-load light disabled while queued is rejected atomically."""
+    entry = await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    ws = await hass_ws_client(hass)
+    lock = _membership_lock(hass, entry.entry_id)
+    queued, instrumented_update = _membership_update_barrier()
+
+    with (
+        patch.object(
+            hass.config_entries, "async_reload", new_callable=AsyncMock
+        ) as reload_entry,
+        patch(
+            "custom_components.lightener_studio.websocket.async_set_controlled_lights",
+            new=instrumented_update,
+        ),
+    ):
+        await lock.acquire()
+        try:
+            await ws.send_json(
+                {
+                    "id": 64,
+                    "type": "lightener/set_controlled_lights",
+                    "entity_id": "light.membership",
+                    "observed_controlled_entity_ids": ["light.test1"],
+                    "controlled_entity_ids": ["light.test1", "light.test2"],
+                }
+            )
+            await asyncio.wait_for(queued.wait(), timeout=5)
+
+            async_get_entity_registry(hass).async_update_entity(
+                "light.test2", disabled_by=RegistryEntryDisabler.USER
+            )
+        finally:
+            lock.release()
+
+        result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == MEMBERSHIP_ERROR_DISABLED_ENTITY
+    assert list(entry.data["entities"]) == ["light.test1"]
+    reload_entry.assert_not_awaited()
+
+
+async def test_legacy_add_light_rejects_disabled_member_with_stable_error(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """The compatibility add RPC cannot bypass disabled-member validation."""
+    entry = await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    async_get_entity_registry(hass).async_update_entity(
+        "light.test2", disabled_by=RegistryEntryDisabler.USER
+    )
+
+    ws = await hass_ws_client(hass)
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock
+    ) as reload_entry:
+        await ws.send_json(
+            {
+                "id": 65,
+                "type": "lightener/add_light",
+                "entity_id": "light.membership",
+                "controlled_entity_id": "light.test2",
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"] == {
+        "code": DISABLED_ENTITY_ERROR["code"],
+        "message": DISABLED_ENTITY_MESSAGE,
+    }
+    assert DISABLED_ENTITY_ERROR["code"] == MEMBERSHIP_ERROR_DISABLED_ENTITY
+    assert list(entry.data["entities"]) == ["light.test1"]
+    reload_entry.assert_not_awaited()
 
 
 async def test_add_light_rejects_membership_that_changed_while_queued(
@@ -314,12 +837,19 @@ async def test_add_light_rejects_membership_that_changed_while_queued(
     )
     ws = await hass_ws_client(hass)
     lock = _membership_lock(hass, entry.entry_id)
+    queued, instrumented_update = _membership_update_barrier()
 
-    with patch.object(
-        hass.config_entries,
-        "async_reload",
-        new_callable=AsyncMock,
-        return_value=True,
+    with (
+        patch.object(
+            hass.config_entries,
+            "async_reload",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch(
+            "custom_components.lightener_studio.websocket.async_set_controlled_lights",
+            new=instrumented_update,
+        ),
     ):
         # Hold the membership lock so the add handler snapshots current members
         # and then parks on the lock, exactly like a real op queued behind a
@@ -334,12 +864,7 @@ async def test_add_light_rejects_membership_that_changed_while_queued(
                     "controlled_entity_id": "light.new",
                 }
             )
-            for _ in range(200):
-                if lock._waiters:
-                    break
-                await asyncio.sleep(0)
-            else:  # pragma: no cover - defensive
-                pytest.fail("add_light never queued on the membership lock")
+            await asyncio.wait_for(queued.wait(), timeout=5)
 
             # Simulate a concurrent commit landing while the add was queued.
             hass.config_entries.async_update_entry(

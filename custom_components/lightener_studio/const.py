@@ -17,3 +17,12 @@ CURVE_PRESETS: dict[str, dict[str, str]] = {
 }
 
 DEFAULT_CURVE_PRESET = "linear"
+
+# Versioned contract for ``lightener/list_candidate_lights`` registry-state
+# metadata. Clients must treat a response as v1 only when this exact capability
+# marker is present and every row owns all required boolean fields.
+CANDIDATE_STATE_METADATA_CAPABILITY = "candidate_state_metadata"
+CANDIDATE_STATE_METADATA_VERSION = 1
+
+# Stable membership error surfaced by every write path.
+MEMBERSHIP_ERROR_DISABLED_ENTITY = "disabled_entity"

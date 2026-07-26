@@ -42,6 +42,56 @@ fi
 
 . .venv/bin/activate
 
+# PyTurboJPEG needs the native jpeg-turbo library. Homebrew keeps it outside
+# macOS's default loader path, so expose the formula automatically when present.
+if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+    LIGHTENER_JPEG_TURBO_PREFIX=$(brew --prefix jpeg-turbo 2>/dev/null || true)
+    if [[ -d "${LIGHTENER_JPEG_TURBO_PREFIX}/lib" ]]; then
+        export DYLD_LIBRARY_PATH="${LIGHTENER_JPEG_TURBO_PREFIX}/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+    fi
+fi
+
+if ! python - <<'PY'
+from importlib.metadata import PackageNotFoundError, version
+
+required = (
+    "home-assistant-frontend",
+    "PyTurboJPEG",
+    "hassil",
+    "home-assistant-intents",
+    "mutagen",
+    "av",
+    "ha-ffmpeg",
+    "pycountry",
+    "radios",
+    "pymicro-vad",
+    "pyspeex-noise",
+)
+missing = []
+for package in required:
+    try:
+        version(package)
+    except PackageNotFoundError:
+        missing.append(package)
+if missing:
+    raise SystemExit(f"Missing isolated HA runtime packages: {', '.join(missing)}")
+
+from turbojpeg import TurboJPEG
+
+TurboJPEG()
+PY
+then
+    echo "[develop] Runtime dependencies are incomplete." >&2
+    echo "Run scripts/setup-python again." >&2
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        echo "On macOS, also install the native library with: brew install jpeg-turbo" >&2
+    elif [[ "$(uname -s)" == "Linux" ]]; then
+        echo "On Ubuntu Noble, install: sudo apt-get install libturbojpeg" >&2
+        echo "On older Debian/Ubuntu releases, use libturbojpeg0 if that is the available package." >&2
+    fi
+    exit 1
+fi
+
 if [[ "$FRESH" -eq 1 ]]; then
     echo "[develop] --fresh: wiping local HA state (keeping configuration.yaml)"
     rm -rf config/.storage config/*.db config/*.db-* \
