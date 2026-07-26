@@ -515,7 +515,10 @@ describe('lightener-curve-card — light management', () => {
     expect(statuses[0].textContent).not.toContain('Saved successfully');
   });
 
-  it('replaces an existing save error with membership confirmation', async () => {
+  // LP1 (PRESERVE TRUSTED CURVE BEHAVIOR): a membership update must never make
+  // a failed curve save look like it succeeded. The two banners describe two
+  // different objects, so both stay — and the error keeps its Retry affordance.
+  it('keeps an unacknowledged save error visible through a membership update', async () => {
     const { card } = await mountCard({
       'light.a': { brightness: { '100': '100' } },
     });
@@ -534,7 +537,9 @@ describe('lightener-curve-card — light management', () => {
     });
     await card.updateComplete;
 
-    expect(card.renderRoot.querySelector('.status-stack .error')).toBeNull();
+    const error = card.renderRoot.querySelector('.status-stack .error');
+    expect(error?.textContent).toContain('Save failed');
+    expect(error?.querySelector('.retry-link')).not.toBeNull();
     const statuses = card.renderRoot.querySelectorAll('.status-stack [role="status"]');
     expect(statuses).toHaveLength(1);
     expect(statuses[0].textContent).toContain('Lights updated.');

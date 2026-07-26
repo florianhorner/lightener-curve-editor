@@ -2180,7 +2180,15 @@ export class LightenerCurveCard extends LitElement {
 
   private _showMembershipStatus(): void {
     this._clearMembershipStatus();
-    this._dispatchSave({ type: 'reset' });
+    // Retire a stale success banner so it can't stack with "Lights updated."
+    // An `error` banner is NOT ours to retire: `reset` maps to `idle`
+    // unconditionally, so clearing it here would swap an unacknowledged curve
+    // save failure for a success toast the user never earned. A membership
+    // update succeeding says nothing about the curve save that failed, and the
+    // error carries the only Retry affordance. Both banners stay.
+    if (this._saveState.phase !== 'error') {
+      this._dispatchSave({ type: 'reset' });
+    }
     this._membershipStatus = UI.membership.updated;
     this._membershipStatusTimer = window.setTimeout(() => {
       this._membershipStatusTimer = null;
