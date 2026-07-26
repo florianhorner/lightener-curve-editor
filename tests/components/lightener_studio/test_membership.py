@@ -9,6 +9,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
+import pytest
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar
@@ -26,6 +27,7 @@ from custom_components.lightener_studio.const import (
     MEMBERSHIP_ERROR_DISABLED_ENTITY,
 )
 from custom_components.lightener_studio.membership import (
+    MembershipError,
     MembershipUpdate,
     _membership_lock,
     async_set_controlled_lights,
@@ -519,6 +521,131 @@ async def test_membership_validation_reads_each_registry_entry_once(
         "light.lookup_retained",
         "light.lookup_new",
     ]
+
+
+async def test_membership_validation_rejects_a_nested_lightener_group(
+    hass: HomeAssistant,
+) -> None:
+    """A Lightener-platform light is rejected before it can nest a group."""
+    entity_registry = async_get_entity_registry(hass)
+    nested = entity_registry.async_get_or_create(
+        domain="light",
+        platform=DOMAIN,
+        unique_id="nested-group",
+        suggested_object_id="nested_group",
+    )
+    assert nested.entity_id == "light.nested_group"
+    # A same-platform NON-light entity is rejected as not_a_light, not as
+    # recursion. Note this does NOT pin the guard's `domain == "light"`
+    # conjunct: RegistryEntry.domain is split_entity_id(entity_id)[0], so behind
+    # the earlier startswith("light.") check that conjunct is always true.
+    # It is harmless defence-in-depth, not a load-bearing condition.
+    sibling_sensor = entity_registry.async_get_or_create(
+        domain="sensor",
+        platform=DOMAIN,
+        unique_id="group-diagnostic",
+        suggested_object_id="group_diagnostic",
+    )
+    assert sibling_sensor.entity_id == "sensor.group_diagnostic"
+
+    with pytest.raises(MembershipError) as excinfo:
+        validate_membership_selection(
+            hass,
+            "light.membership",
+            {"light.test1": {"brightness": {"100": "100"}}},
+            ["light.test1", "light.nested_group"],
+        )
+
+    assert excinfo.value.code == "recursive_lightener"
+
+    # The sensor is rejected for not being a light, NOT for recursion — proof the
+    # domain conjunct is what separates the two paths.
+    with pytest.raises(MembershipError) as sensor_excinfo:
+        validate_membership_selection(
+            hass,
+            "light.membership",
+            {"light.test1": {"brightness": {"100": "100"}}},
+            ["light.test1", "sensor.group_diagnostic"],
+        )
+
+    assert sensor_excinfo.value.code == "not_a_light"
+
+
+async def test_batch_rejects_nested_lightener_group_without_mutation(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """The recursion guard surfaces over the wire and never mutates the entry."""
+    entry = await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    entity_registry = async_get_entity_registry(hass)
+    nested = entity_registry.async_get_or_create(
+        domain="light",
+        platform=DOMAIN,
+        unique_id="nested-group",
+        suggested_object_id="nested_group",
+    )
+
+    ws = await hass_ws_client(hass)
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock
+    ) as reload_entry:
+        await ws.send_json(
+            {
+                "id": 64,
+                "type": "lightener/set_controlled_lights",
+                "entity_id": "light.membership",
+                "observed_controlled_entity_ids": ["light.test1"],
+                "controlled_entity_ids": ["light.test1", nested.entity_id],
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "recursive_lightener"
+    assert list(entry.data["entities"]) == ["light.test1"]
+    reload_entry.assert_not_awaited()
+
+
+async def test_candidate_list_inherits_area_from_device(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """A light with no entity-level area reports its device's area."""
+    entry = await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    area = ar.async_get(hass).async_create("Hallway")
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "device-area-fixture")},
+    )
+    dr.async_get(hass).async_update_device(device.id, area_id=area.id)
+    entity_registry = async_get_entity_registry(hass)
+    inherited = entity_registry.async_get_or_create(
+        domain="light",
+        platform="candidate_fixture",
+        unique_id="device-area-light",
+        suggested_object_id="device_area_light",
+        device_id=device.id,
+    )
+    assert inherited.area_id is None
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 65,
+            "type": "lightener/list_candidate_lights",
+            "entity_id": "light.membership",
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is True
+    by_id = {item["entity_id"]: item for item in result["result"]["lights"]}
+    assert by_id[inherited.entity_id]["area_id"] == area.id
+    assert by_id[inherited.entity_id]["area_name"] == "Hallway"
 
 
 async def test_batch_rejects_new_disabled_member_without_mutation(
