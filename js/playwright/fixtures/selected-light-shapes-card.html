@@ -49,9 +49,14 @@
       const params = new URLSearchParams(window.location.search);
       const membershipScenario = params.get('membership') ?? 'default';
       const requestedCandidateCount = Number(params.get('candidates') ?? '100');
-      const DISABLED_ENTITY_MESSAGE = (entityId) =>
-        `Could not add ${entityId} because it is disabled in Home Assistant. ` +
-        'Enable it under Settings → Devices & services → Entities, reopen Edit lights, and try again.';
+      const candidateContractResponse = await fetch('/tests/fixtures/candidate_lights_v1.json');
+      if (!candidateContractResponse.ok) {
+        throw new Error('Could not load the shared candidate-light contract fixture');
+      }
+      const candidateContract = await candidateContractResponse.json();
+      const disabledEntityError = candidateContract.errors.disabled_entity;
+      const disabledEntityMessage = (entityId) =>
+        disabledEntityError.message_template.replace('{entity_id}', entityId);
 
       // A fresh group: every light at the equal-brightness default ({1:1,100:100}
       // -> [{0,0},{1,1},{100,100}]). The card should show the compact Shapes
@@ -189,7 +194,13 @@
           };
         }
         if (membershipScenario === 'malformed') {
-          delete lights[lights.length - 1].disabled;
+          const malformed = lights.find(
+            (candidate) => candidate.entity_id === 'light.hidden_disabled_lamp'
+          );
+          if (!malformed) {
+            throw new Error('Malformed-contract sentinel candidate is missing');
+          }
+          delete malformed.disabled;
         }
         return {
           capabilities: { candidate_state_metadata: 1 },
@@ -256,8 +267,8 @@
                   window.__LIGHTENER_FORCE_DISABLED_ENTITY__ === entityId)
             );
             if (disabledEntity) {
-              const error = new Error(DISABLED_ENTITY_MESSAGE(disabledEntity));
-              error.code = 'disabled_entity';
+              const error = new Error(disabledEntityMessage(disabledEntity));
+              error.code = disabledEntityError.code;
               throw error;
             }
             const next = Object.fromEntries(

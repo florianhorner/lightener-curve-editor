@@ -1,15 +1,25 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
 const FIXTURE = '/js/playwright/fixtures/selected-light-shapes-card.html';
 const PRIOR_STABLE_TAG = 'v2.17.2';
 const PRIOR_STABLE_BUNDLE = 'custom_components/lightener_studio/frontend/lightener-curve-card.js';
-const DISABLED_ENTITY_MESSAGE =
-  'Could not add light.disabled_lamp because it is disabled in Home Assistant. ' +
-  'Enable it under Settings → Devices & services → Entities, reopen Edit lights, and try again.';
+const CANDIDATE_CONTRACT = JSON.parse(
+  readFileSync(new URL('../../tests/fixtures/candidate_lights_v1.json', import.meta.url), 'utf8')
+) as {
+  errors: {
+    disabled_entity: {
+      code: string;
+      message_template: string;
+    };
+  };
+};
+const DISABLED_ENTITY_ERROR = CANDIDATE_CONTRACT.errors.disabled_entity;
+const disabledEntityMessage = (entityId: string): string =>
+  DISABLED_ENTITY_ERROR.message_template.replace('{entity_id}', entityId);
 
 type StableArtifact = {
   tag: string;
@@ -29,24 +39,26 @@ function gitText(...args: string[]): string {
 }
 
 function resolvePriorStableArtifact(): StableArtifact | null {
+  let commit: string;
   try {
-    const source = execFileSync('git', ['show', `${PRIOR_STABLE_TAG}:${PRIOR_STABLE_BUNDLE}`], {
-      encoding: 'utf8',
-      maxBuffer: 4 * 1024 * 1024,
-    });
-    return {
-      tag: PRIOR_STABLE_TAG,
-      commit: gitText('rev-list', '-n', '1', PRIOR_STABLE_TAG),
-      path: PRIOR_STABLE_BUNDLE,
-      sha256: createHash('sha256').update(source).digest('hex'),
-      source,
-    };
+    commit = gitText('rev-list', '-n', '1', PRIOR_STABLE_TAG);
   } catch {
     return null;
   }
-}
+  if (!commit) return null;
 
-const priorStable = resolvePriorStableArtifact();
+  const source = execFileSync('git', ['show', `${PRIOR_STABLE_TAG}:${PRIOR_STABLE_BUNDLE}`], {
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  return {
+    tag: PRIOR_STABLE_TAG,
+    commit,
+    path: PRIOR_STABLE_BUNDLE,
+    sha256: createHash('sha256').update(source).digest('hex'),
+    source,
+  };
+}
 
 function percentile(values: number[], fraction: number): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -99,9 +111,10 @@ async function measureInitialRenderSamples(
         if (!dialog) await new Promise((resolve) => setTimeout(resolve, 0));
       }
       if (!dialog) throw new Error('Membership dialog did not mount');
-      while (dialog._loading) {
+      for (let attempt = 0; attempt < 100 && dialog._loading; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
+      if (dialog._loading) throw new Error('Membership dialog did not finish loading');
       await dialog.updateComplete;
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       return {
@@ -284,7 +297,7 @@ test.describe('membership picker contract (built bundle)', () => {
     );
   });
 
-  test('keyboard focus, Escape recovery, and 200% zoom keep the dialog usable', async ({
+  test('keyboard focus, Escape recovery, and 200% reflow keep the dialog usable', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 640, height: 800 });
@@ -299,9 +312,9 @@ test.describe('membership picker contract (built bundle)', () => {
     await page.keyboard.press('Space');
     await expect(currentGroup).toBeChecked();
 
-    await page.evaluate(() => {
-      document.documentElement.style.zoom = '2';
-    });
+    // Halving the CSS viewport exercises the reflow that 200% browser zoom
+    // requires, including responsive breakpoints that style.zoom skips.
+    await page.setViewportSize({ width: 320, height: 800 });
     await expect(dialog).toBeVisible();
     const layout = await page.evaluate(() => {
       const dialog = document
@@ -559,6 +572,7 @@ test.describe('prior stable binary skew proof', () => {
   test('v2.17.2 ignores v1 extras and surfaces actionable disabled_entity recovery', async ({
     page,
   }, testInfo) => {
+    const priorStable = resolvePriorStableArtifact();
     expect(
       priorStable,
       `Fetch ${PRIOR_STABLE_TAG} before claiming prior-bundle binary skew proof`
@@ -571,9 +585,6 @@ test.describe('prior stable binary skew proof', () => {
     await page.waitForFunction(() => customElements.get('light-membership-dialog') !== undefined);
     await page.evaluate(
       ({ disabledMessage }) => {
-        const entities = {
-          'light.a': { brightness: { 1: '1', 100: '100' } },
-        };
         const hass = {
           user: { is_admin: true },
           locale: { language: 'en' },
@@ -625,9 +636,8 @@ test.describe('prior stable binary skew proof', () => {
         dialog.groupEntityId = 'light.membership_proof';
         document.getElementById('root')!.append(dialog);
         (window as any).__STABLE_DIALOG__ = dialog;
-        (window as any).__STABLE_ENTITIES__ = entities;
       },
-      { disabledMessage: DISABLED_ENTITY_MESSAGE }
+      { disabledMessage: disabledEntityMessage('light.disabled_lamp') }
     );
 
     const dialog = page.getByRole('dialog', { name: 'Edit lights' });
@@ -636,7 +646,9 @@ test.describe('prior stable binary skew proof', () => {
     await expect(disabledRow).toBeVisible();
     await disabledRow.getByRole('checkbox').check();
     await dialog.getByRole('button', { name: 'Update lights' }).click();
-    await expect(dialog.getByRole('alert')).toHaveText(DISABLED_ENTITY_MESSAGE);
+    await expect(dialog.getByRole('alert')).toHaveText(
+      disabledEntityMessage('light.disabled_lamp')
+    );
 
     const manifest = {
       tag: artifact.tag,

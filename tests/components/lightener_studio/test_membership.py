@@ -33,10 +33,10 @@ from custom_components.lightener_studio.membership import (
 CANDIDATE_FIXTURE_PATH = (
     Path(__file__).resolve().parents[2] / "fixtures" / "candidate_lights_v1.json"
 )
-DISABLED_ENTITY_MESSAGE = (
-    "Could not add light.test2 because it is disabled in Home Assistant. "
-    "Enable it under Settings → Devices & services → Entities, "
-    "reopen Edit lights, and try again."
+CANDIDATE_CONTRACT = json.loads(CANDIDATE_FIXTURE_PATH.read_text(encoding="utf-8"))
+DISABLED_ENTITY_ERROR = CANDIDATE_CONTRACT["errors"]["disabled_entity"]
+DISABLED_ENTITY_MESSAGE = DISABLED_ENTITY_ERROR["message_template"].replace(
+    "{entity_id}", "light.test2"
 )
 
 
@@ -350,7 +350,7 @@ async def test_candidate_list_matches_shared_v1_state_fixture(
     hass: HomeAssistant, hass_ws_client
 ) -> None:
     """The backend emits the complete, versioned candidate-state contract."""
-    expected = json.loads(CANDIDATE_FIXTURE_PATH.read_text(encoding="utf-8"))
+    expected = CANDIDATE_CONTRACT
 
     for entity_id in (
         "light.disabled_new",
@@ -529,9 +529,10 @@ async def test_batch_rejects_new_disabled_member_without_mutation(
 
     assert result["success"] is False
     assert result["error"] == {
-        "code": MEMBERSHIP_ERROR_DISABLED_ENTITY,
+        "code": DISABLED_ENTITY_ERROR["code"],
         "message": DISABLED_ENTITY_MESSAGE,
     }
+    assert DISABLED_ENTITY_ERROR["code"] == MEMBERSHIP_ERROR_DISABLED_ENTITY
     assert list(entry.data["entities"]) == ["light.test1"]
     reload_entry.assert_not_awaited()
 
@@ -661,9 +662,10 @@ async def test_legacy_add_light_rejects_disabled_member_with_stable_error(
 
     assert result["success"] is False
     assert result["error"] == {
-        "code": MEMBERSHIP_ERROR_DISABLED_ENTITY,
+        "code": DISABLED_ENTITY_ERROR["code"],
         "message": DISABLED_ENTITY_MESSAGE,
     }
+    assert DISABLED_ENTITY_ERROR["code"] == MEMBERSHIP_ERROR_DISABLED_ENTITY
     assert list(entry.data["entities"]) == ["light.test1"]
     reload_entry.assert_not_awaited()
 
