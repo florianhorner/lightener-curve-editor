@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **A disabled entity cannot be added through a stale or older client.** Candidate metadata is versioned and skew-safe, while the backend rechecks new members inside the membership lock and returns an actionable `disabled_entity` error without mutating the group. Existing disabled members remain retainable and removable.
 - **Edit lights now recovers without losing focus or showing contradictory status.** Failed candidate loads wait for an explicit retry, disappearing or disabled-only results restore focus inside the dialog, exceptional counts follow the active discovery view, and save or membership confirmations replace each other instead of stacking.
+- **A group carried over from an old configuration can be edited again.** If a migrated group already contained a member that today's rules would refuse — another Lightener group, or an entity that is not a light — every edit was rejected, including the removal that would have fixed it. Members you already have are now left alone; the rules still apply to lights you add.
 
 ## [2.17.2] - 2026-07-18
 
