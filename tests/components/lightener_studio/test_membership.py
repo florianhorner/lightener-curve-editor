@@ -497,7 +497,7 @@ async def test_candidate_list_resolves_registries_once_per_request(
 async def test_membership_validation_reads_each_registry_entry_once(
     hass: HomeAssistant,
 ) -> None:
-    """Validation reuses each entry for recursion, retention, and disable checks."""
+    """Validation resolves only new members, and each of those exactly once."""
     for entity_id in ("light.lookup_retained", "light.lookup_new"):
         _register_fixture_light(hass, entity_id)
 
@@ -517,8 +517,9 @@ async def test_membership_validation_reads_each_registry_entry_once(
             ["light.lookup_retained", "light.lookup_new"],
         )
 
+    # A retained member short-circuits before any registry work, and the one new
+    # member is resolved once for the recursion, disable, and existence checks.
     assert [call.args[1] for call in async_get_entry.call_args_list] == [
-        "light.lookup_retained",
         "light.lookup_new",
     ]
 
@@ -569,6 +570,106 @@ async def test_membership_validation_rejects_a_nested_lightener_group(
         )
 
     assert sensor_excinfo.value.code == "not_a_light"
+
+
+async def test_membership_validation_retains_legacy_invalid_members(
+    hass: HomeAssistant,
+) -> None:
+    """Members a v1 YAML group already holds never block an unrelated edit."""
+    entity_registry = async_get_entity_registry(hass)
+    nested = entity_registry.async_get_or_create(
+        domain="light",
+        platform=DOMAIN,
+        unique_id="nested-group",
+        suggested_object_id="nested_group",
+    )
+    assert nested.entity_id == "light.nested_group"
+    _register_fixture_light(hass, "light.newcomer")
+    existing = {
+        # A v1 YAML migration could persist both a nested Lightener and a
+        # non-light member; neither can be granted today.
+        "light.nested_group": {"brightness": {"100": "100"}},
+        "switch.legacy_relay": {"brightness": {"100": "100"}},
+    }
+
+    # Keeping both while adding a light is allowed...
+    validate_membership_selection(
+        hass,
+        "light.membership",
+        existing,
+        ["light.nested_group", "switch.legacy_relay", "light.newcomer"],
+    )
+    # ...and so is dropping one of them.
+    validate_membership_selection(
+        hass,
+        "light.membership",
+        existing,
+        ["light.nested_group"],
+    )
+
+    # Granting the same nested group to a Lightener that does not already hold
+    # it is still rejected.
+    with pytest.raises(MembershipError) as excinfo:
+        validate_membership_selection(
+            hass,
+            "light.membership",
+            {"light.newcomer": {"brightness": {"100": "100"}}},
+            ["light.newcomer", "light.nested_group"],
+        )
+
+    assert excinfo.value.code == "recursive_lightener"
+
+
+async def test_membership_validation_never_retains_a_self_reference(
+    hass: HomeAssistant,
+) -> None:
+    """Retention cannot smuggle the group itself back into its own members."""
+    with pytest.raises(MembershipError) as excinfo:
+        validate_membership_selection(
+            hass,
+            "light.membership",
+            {"light.membership": {"brightness": {"100": "100"}}},
+            ["light.membership"],
+        )
+
+    assert excinfo.value.code == "self_reference"
+
+
+async def test_legacy_remove_light_works_on_a_group_nesting_a_lightener(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """The legacy per-light path can still edit a v1-migrated nested group."""
+    entity_registry = async_get_entity_registry(hass)
+    nested = entity_registry.async_get_or_create(
+        domain="light",
+        platform=DOMAIN,
+        unique_id="nested-group",
+        suggested_object_id="nested_group",
+    )
+    entry = await _setup_lightener(
+        hass,
+        {
+            "light.test1": {"brightness": {"100": "100"}},
+            nested.entity_id: {"brightness": {"100": "100"}},
+        },
+    )
+
+    ws = await hass_ws_client(hass)
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock, return_value=True
+    ):
+        await ws.send_json(
+            {
+                "id": 70,
+                "type": "lightener/remove_light",
+                "entity_id": "light.membership",
+                "controlled_entity_id": "light.test1",
+            }
+        )
+        result = await ws.receive_json()
+
+    assert result["success"] is True
+    assert list(entry.data["entities"]) == [nested.entity_id]
 
 
 async def test_batch_rejects_nested_lightener_group_without_mutation(
