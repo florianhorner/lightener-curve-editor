@@ -559,8 +559,6 @@ async def test_membership_validation_rejects_a_nested_lightener_group(
 
     assert excinfo.value.code == "recursive_lightener"
 
-    # The sensor is rejected for not being a light, NOT for recursion — proof the
-    # domain conjunct is what separates the two paths.
     with pytest.raises(MembershipError) as sensor_excinfo:
         validate_membership_selection(
             hass,

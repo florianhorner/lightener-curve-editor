@@ -33,6 +33,7 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v4"
         with:
+          persist-credentials: false
           fetch-depth: 0 # need origin/master to enforce a current base
 
       - name: "Refuse a stale base"
