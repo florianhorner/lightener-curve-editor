@@ -23,6 +23,7 @@ jobs:
       - name: "Checkout the repository"
         uses: "actions/checkout@v4"
         with:
+          persist-credentials: false
           fetch-depth: 0 # full history so the demo freshness gate can diff sources
 
       - name: "Assert the tag is on the right release line"
