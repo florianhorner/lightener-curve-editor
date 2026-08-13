@@ -1,7 +1,10 @@
 export const LIGHTENER_ENTITY = 'light.preview_lightener';
 export const CANDIDATE_STATE_METADATA_VERSION = 1;
 
-const disabledEntityMessage = (entityId) =>
+// Exported so `js/src/utils/demo-contract.test.ts` can check the rendered
+// sentence against tests/fixtures/candidate_lights_v1.json, the shared contract
+// pin, rather than scrape this file's source.
+export const disabledEntityMessage = (entityId) =>
   `Could not add ${entityId} because it is disabled in Home Assistant. ` +
   'Enable it under Settings → Devices & services → Entities, reopen Edit lights, and try again.';
 
