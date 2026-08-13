@@ -27,6 +27,7 @@ from custom_components.lightener_studio.const import (
     MEMBERSHIP_ERROR_DISABLED_ENTITY,
 )
 from custom_components.lightener_studio.membership import (
+    MAX_CONTROLLED_LIGHTS,
     MembershipError,
     MembershipUpdate,
     _membership_lock,
@@ -522,6 +523,45 @@ async def test_membership_validation_reads_each_registry_entry_once(
     assert [call.args[1] for call in async_get_entry.call_args_list] == [
         "light.lookup_new",
     ]
+
+
+async def test_too_many_is_handler_side_not_reachable_over_the_batch_command(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Pin README's claim about where `too_many` surfaces.
+
+    The batch command's schema bounds the list at the same limit the handler
+    enforces, so an oversized payload never reaches `MAX_CONTROLLED_LIGHTS`.
+    Home Assistant answers with its own schema error instead. The check stays
+    live for the paths that build the member list server-side.
+    """
+    oversized = [f"light.bulk_{index}" for index in range(MAX_CONTROLLED_LIGHTS + 1)]
+
+    # Handler side: still the code the other paths get.
+    with pytest.raises(MembershipError) as excinfo:
+        validate_membership_selection(hass, "light.membership", {}, oversized)
+    assert excinfo.value.code == "too_many"
+
+    # Wire side: rejected earlier, and NOT as `too_many`.
+    entry = await _setup_lightener(
+        hass,
+        {"light.test1": {"brightness": {"100": "100"}}},
+    )
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 66,
+            "type": "lightener/set_controlled_lights",
+            "entity_id": "light.membership",
+            "observed_controlled_entity_ids": ["light.test1"],
+            "controlled_entity_ids": oversized,
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] != "too_many"
+    assert list(entry.data["entities"]) == ["light.test1"]
 
 
 async def test_membership_validation_rejects_a_nested_lightener_group(
