@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <sub>Coming next: per-light <strong>color temperature</strong> curves — <a href="https://florianhorner.github.io/lightener-studio/color-temp-demo.html">try the interactive preview</a></sub>
+  <sub>Tell us what your lights did when you turned the dial — <a href="https://github.com/florianhorner/lightener-studio/blob/master/docs/OPEN-ROOM-LAB.md"><strong>Open Room Lab</strong></a></sub>
 </p>
 
 <p align="center">
@@ -278,6 +278,7 @@ console.log(curves);
 
 ## Documentation
 
+- [docs/OPEN-ROOM-LAB.md](docs/OPEN-ROOM-LAB.md) — where things stand today, and how to report what your room did with a curve
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — local setup, tooling, and workflow
 - [SECURITY.md](SECURITY.md) — vulnerability reporting policy
