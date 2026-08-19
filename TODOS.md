@@ -59,3 +59,12 @@ tracked as GitHub Issues before implementation.
      P0/P1 code bugs; both headline guarantees verified. These are the P2 remainder. -->
 - [ ] **[P2 — concurrency]** `ws_save_curves` does not take the membership lock, so a curve-save's fallthrough `async_reload` can overlap `set_controlled_lights`'s reload on the same entry → HA `OperationNotAllowed` surfaces as a spurious `reload_failed`/rollback. Two-session only (single-user UX is gated by `_canManageLights` / card lock); guard by sharing the membership lock or serializing per-entry reloads (`membership.py:175`, `websocket.py` `ws_save_curves`).
 - [ ] **[P2 — test coverage]** Add one integration test that commits a membership change with `async_reload` NOT mocked and asserts the live entity controls the new set — every current membership test mocks reload, so a reload that silently fails to rebuild from new data would pass. Also cover the handoff deleted-entry prune (`handoff.py:149-160`) and `Store.async_save` failure paths (`handoff.py:98-103,135`).
+
+<!-- Open Room Lab follow-ups (docs/OPEN-ROOM-LAB.md, shipped 2026-08-19). The v1 Lab
+     is documentation only and must not create a recurring content obligation, so
+     none of these start on a schedule. Each waits for its named trigger to fire.
+     Zero incoming reports is itself evidence: check discovery before adding
+     machinery. -->
+- [ ] **[P3 — Room Lab, evidence-triggered]** Room-archetype starter kits (a named starting shape per room type: living room, bedroom, kitchen, hallway). **Trigger:** incoming Room Proof reports cluster on the same few room types *and* show people struggling to pick a first shape. Until reports say which archetypes matter, any kit is a guess, and a wrong default is worse than none.
+- [ ] **[P3 — Room Lab, evidence-triggered]** A recurring Room Lab ritual (e.g. a periodic round-up of rooms posted). **Trigger:** sustained inbound volume that a one-off read cannot keep up with. Deliberately excluded from v1: a ritual without demand behind it becomes an unpaid content treadmill, then a visibly abandoned one, which reads worse than never starting.
+- [ ] **[P3 — Room Lab, evidence-triggered]** Contributor onboarding beyond the current `CONTRIBUTING.md` (a "your first curve fix" path from report to PR). **Trigger:** a reporter asks how to fix the thing they just reported, or a drive-by PR arrives that needed guidance the repo does not currently give.
