@@ -7,7 +7,8 @@ corner lamp to stay a soft glow while the ceiling comes up, or the kitchen to
 stop jumping from off to interrogation. The Open Room Lab is where you say what
 you wanted your room to do, what shape you drew, and what the lights did.
 
-The whole thing is this page and two GitHub Discussions. No signup.
+The whole thing is this page and two GitHub Discussions. No separate signup: you
+post with the GitHub account you already have.
 
 - **Try it with no install:** [live demo](https://florianhorner.github.io/lightener-studio/)
 - **Install it in Home Assistant:** [add the custom repository in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=florianhorner&repository=lightener-studio&category=integration)
@@ -123,11 +124,19 @@ and logs alike.
 - raw log dumps. Read every line and replace the identifying parts before
   pasting; a stack trace usually carries entity IDs and paths through it.
 
-If something sensitive does get posted, it will be hidden, deleted, or reported
-immediately wherever permissions allow, and you will be asked for a sanitized
-replacement. It won't be quoted, screenshotted, or archived anywhere in the
-process, including in the request to replace it. If you spot your own mistake
-first, say so; it gets handled the same way, and catching it costs you nothing.
+**If you posted a token, password, or any other credential, revoke and rotate it
+right now.** Do not wait for the post to come down. Taking a post down is not the
+same as making it unseen.
+
+Beyond that: a sensitive post will be hidden or deleted wherever permissions
+allow, and you will be asked for a sanitized replacement. The request itself
+won't quote or screenshot what you posted. But be clear-eyed about the limits of
+that, because they are not ours to remove. GitHub keeps an edit history on
+comments, notification emails may already carry the original text, and anyone who
+read the post may have copied it. Deletion reduces exposure; it does not undo it.
+
+If you spot your own mistake first, say so. It gets handled the same way, and
+catching it costs you nothing.
 
 ### Where to post
 
