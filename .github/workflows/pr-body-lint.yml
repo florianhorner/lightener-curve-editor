@@ -30,6 +30,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: florianhorner/gh-workflows/.github/workflows/body-lint.yml@700f7ce60a9c030bac22437fcc2775c70b2bf079 # v1.4
+    uses: florianhorner/gh-workflows/.github/workflows/body-lint.yml@fde64f42deb15511c2c71cb9798c2d6685379e38 # v1.5
     with:
       target: pr-body
