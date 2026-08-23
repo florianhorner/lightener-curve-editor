@@ -12,5 +12,5 @@ av==16.0.1
 ha-ffmpeg==3.2.2
 pycountry==24.6.1
 radios==0.3.2
-pymicro-vad==1.0.1
+pymicro-vad==2.1.0
 pyspeex-noise==1.0.2
