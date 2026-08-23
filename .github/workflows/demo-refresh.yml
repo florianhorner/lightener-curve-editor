@@ -68,7 +68,7 @@ jobs:
 
       - name: "Cache gifski (canonical encoder, pinned)"
         id: gifski-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/bin/gifski
           key: gifski-${{ env.GIFSKI_VERSION }}-linux
