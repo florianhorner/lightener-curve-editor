@@ -3,7 +3,7 @@
 The membership transaction reports failures as error codes over the websocket;
 the editor dialog turns those codes into user-facing copy. The two sides are
 written in different languages, so nothing but a shared fixture keeps them
-aligned — this is the same arrangement ``curve_presets.json`` already provides
+aligned. This is the same arrangement ``curve_presets.json`` already provides
 for the shape definitions.
 
 This test pins the *backend* set of codes. ``js/src/components/
@@ -23,51 +23,84 @@ FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "membership_errors_v1.json"
 FIXTURE = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 MEMBERSHIP_SOURCE = Path(membership.__file__)
 
+_MODULE_CONSTANTS = {
+    name: value
+    for name, value in vars(const).items()
+    if isinstance(value, str) and name.isupper()
+}
 
-def _raised_error_codes() -> set[str]:
-    """Every code literal passed to ``MembershipError`` in membership.py.
+
+def _literal_str(node: ast.AST) -> str | None:
+    """Resolve a node to a string, following const.py names and f-strings.
+
+    An f-string may open with a placeholder (an entity id), so only its literal
+    parts are recoverable; that is enough for the message checks below.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name):
+        return _MODULE_CONSTANTS.get(node.id)
+    if isinstance(node, ast.JoinedStr):
+        return "".join(
+            part.value
+            for part in node.values
+            if isinstance(part, ast.Constant) and isinstance(part.value, str)
+        )
+    return None
+
+
+def _raise_sites() -> list[tuple[int, str, str | None]]:
+    """Every ``MembershipError(...)`` construction as (line, code, message).
 
     Read statically rather than by exercising each failure path, so a code that
-    is unreachable today still has to be declared in the contract.
+    is unreachable today still has to be declared in the contract. Every site is
+    returned separately: collapsing by code would leave all but the last message
+    for a repeated code unchecked.
     """
     tree = ast.parse(MEMBERSHIP_SOURCE.read_text(encoding="utf-8"))
-    module_constants = {
-        name: value
-        for name, value in vars(const).items()
-        if isinstance(value, str) and name.isupper()
-    }
+    sites: list[tuple[int, str, str | None]] = []
 
-    codes: set[str] = set()
     for node in ast.walk(tree):
         if (
             not isinstance(node, ast.Call)
             or not isinstance(node.func, ast.Name)
             or node.func.id != "MembershipError"
-            or not node.args
         ):
             continue
-        first = node.args[0]
-        if isinstance(first, ast.Constant) and isinstance(first.value, str):
-            codes.add(first.value)
-        elif isinstance(first, ast.Name) and first.id in module_constants:
-            codes.add(module_constants[first.id])
-        else:  # pragma: no cover - guards against a non-literal code
+
+        keywords = {kw.arg: kw.value for kw in node.keywords if kw.arg}
+        code_node = node.args[0] if node.args else keywords.get("code")
+        if code_node is None:
+            raise AssertionError(
+                f"MembershipError at line {node.lineno} passes no code; the "
+                "contract cannot verify it."
+            )
+        code = _literal_str(code_node)
+        if code is None:
             raise AssertionError(
                 f"MembershipError code at line {node.lineno} is not a literal "
                 "or a known const; the contract cannot verify it."
             )
-    return codes
+
+        message_node = node.args[1] if len(node.args) > 1 else keywords.get("message")
+        message = _literal_str(message_node) if message_node is not None else None
+        sites.append((node.lineno, code, message))
+
+    return sites
 
 
 def test_backend_membership_error_codes_match_the_contract() -> None:
     """Every raised code is declared, and every declared code is raised."""
-    assert _raised_error_codes() == set(FIXTURE["errors"])
+    raised = {code for _line, code, _message in _raise_sites()}
+
+    assert raised == set(FIXTURE["errors"])
 
 
-def test_the_contract_declares_where_each_message_comes_from() -> None:
-    """Each code says whether the dialog owns its copy or shows the backend's."""
+def test_the_contract_describes_every_code_it_declares() -> None:
+    """Each code says where its copy comes from and whether the editor sees it."""
     for code, entry in FIXTURE["errors"].items():
         assert entry["copy"] in {"dedicated", "backend", "preferred"}, code
+        assert isinstance(entry["batch_command"], bool), code
         assert entry["meaning"].strip(), code
 
 
@@ -81,41 +114,31 @@ def test_disabled_entity_code_is_the_shared_constant() -> None:
     )
 
 
-def test_backend_messages_are_user_facing_where_the_editor_relies_on_them() -> None:
-    """Codes marked ``backend`` must carry a non-empty, sentence-like message,
-    because the dialog renders that string directly."""
-    tree = ast.parse(MEMBERSHIP_SOURCE.read_text(encoding="utf-8"))
-    messages: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if (
-            not isinstance(node, ast.Call)
-            or not isinstance(node.func, ast.Name)
-            or node.func.id != "MembershipError"
-            or len(node.args) < 2
-        ):
-            continue
-        code_node, message_node = node.args[0], node.args[1]
-        if not isinstance(code_node, ast.Constant):
-            continue
-        if isinstance(message_node, ast.Constant) and isinstance(
-            message_node.value, str
-        ):
-            messages[code_node.value] = message_node.value
-        elif isinstance(message_node, ast.JoinedStr):
-            # An f-string may open with a placeholder (an entity id), so only its
-            # literal parts are checkable — record them joined.
-            messages[code_node.value] = "".join(
-                part.value
-                for part in message_node.values
-                if isinstance(part, ast.Constant) and isinstance(part.value, str)
-            )
+def test_too_many_is_declared_as_unreachable_from_the_editor() -> None:
+    """The batch command's schema bound shadows the domain rule.
 
-    for code, entry in FIXTURE["errors"].items():
-        if entry["copy"] != "backend" or code not in messages:
+    ``test_too_many_is_handler_side_not_reachable_over_the_batch_command`` proves
+    the behaviour and the README documents it; this keeps the shared contract
+    from claiming the editor can receive the code.
+    """
+    assert FIXTURE["errors"]["too_many"]["batch_command"] is False
+    assert membership.MAX_CONTROLLED_LIGHTS == 100
+
+
+def test_every_raise_site_carries_a_user_facing_message() -> None:
+    """Codes marked ``backend`` are rendered verbatim by the dialog, so every
+    site that raises one has to supply copy rather than a log fragment."""
+    for line, code, message in _raise_sites():
+        entry = FIXTURE["errors"].get(code)
+        if entry is None or entry["copy"] != "backend":
             continue
-        message = messages[code].strip()
-        assert len(message) > 10, f"{code} message is too terse to show a user"
-        assert not message.endswith(":"), f"{code} message looks like a log prefix"
-        assert message.lower() != code.replace("_", " "), (
-            f"{code} message just restates the code"
+        assert message is not None, (
+            f"MembershipError({code!r}) at line {line} has no recoverable message "
+            "literal, so the contract cannot check what the dialog would show."
+        )
+        text = message.strip()
+        assert len(text) > 10, f"line {line}: {code} message is too terse to show"
+        assert not text.endswith(":"), f"line {line}: {code} reads like a log prefix"
+        assert text.lower() != code.replace("_", " "), (
+            f"line {line}: {code} message just restates the code"
         )

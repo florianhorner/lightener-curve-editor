@@ -10,7 +10,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lightener_studio.config_flow import LightenerConfigFlow
 from custom_components.lightener_studio.const import DOMAIN
-from custom_components.lightener_studio.handoff import ENTRY_HANDOFF_KEY
+from custom_components.lightener_studio.handoff import ENTRY_HANDOFF_KEY, _store
 from custom_components.lightener_studio.websocket import (
     _async_apply_config_entry_update,
     _async_restore_config_entry_data,
@@ -40,6 +40,29 @@ async def _setup_lightener(hass: HomeAssistant, entities: dict | None = None):
     await hass.async_block_till_done()
 
     return config_entry
+
+
+def _handoff_entry(token: str, *, creator: str | None) -> MockConfigEntry:
+    """A Lightener entry carrying a pending handoff token."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        version=LightenerConfigFlow.VERSION,
+        unique_id=str(uuid4()),
+        data={
+            "friendly_name": "Handoff",
+            "entities": {"light.test1": {"brightness": {"100": "100"}}},
+            ENTRY_HANDOFF_KEY: {
+                "token": token,
+                "creator_user_id": creator,
+                "issued_at": time(),
+            },
+        },
+    )
+
+
+def _handoff_store(hass: HomeAssistant):
+    """The handoff ledger store, for asserting what a call consumed."""
+    return _store(hass)
 
 
 async def test_get_curves_returns_entities(hass: HomeAssistant, hass_ws_client) -> None:
@@ -1526,24 +1549,49 @@ async def test_resolve_handoff_forwards_the_error_code_and_message(
     assert result["error"]["message"] == "This Studio handoff is not valid"
 
 
-async def test_resolve_handoff_passes_the_connection_user_id(
-    hass: HomeAssistant, hass_ws_client
+async def test_resolve_handoff_scopes_the_token_to_the_connection_user(
+    hass: HomeAssistant, hass_ws_client, hass_admin_user
 ) -> None:
-    """The wrapper scopes resolution to the calling user, so a creator-locked
-    handoff cannot be consumed over someone else's connection."""
-    await _setup_lightener(hass)
-    ws = await hass_ws_client(hass)
+    """A creator-locked handoff resolves for the user who created it.
 
-    with patch(
-        "custom_components.lightener_studio.websocket.async_resolve_handoff",
-        new_callable=AsyncMock,
-        return_value={"config_entry_id": "entry-1", "first_run_eligible": False},
-    ) as resolve:
-        await ws.send_json(
-            {"id": 1, "type": "lightener/resolve_handoff", "token": "scoped-token"}
-        )
-        result = await ws.receive_json()
+    Asserting the real identity, rather than that *some* string was forwarded,
+    is what pins ``user.id``: forwarding any other attribute of the connection
+    user makes the creator check fail and this test go red.
+    """
+    config_entry = _handoff_entry("owner-token", creator=hass_admin_user.id)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {"id": 1, "type": "lightener/resolve_handoff", "token": "owner-token"}
+    )
+    result = await ws.receive_json()
 
     assert result["success"] is True
-    hass_user_id = resolve.await_args.args[2]
-    assert isinstance(hass_user_id, str) and hass_user_id
+    assert result["result"]["config_entry_id"] == config_entry.entry_id
+
+
+async def test_resolve_handoff_refuses_another_users_token(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """A handoff locked to a different creator is not consumable here, and is
+    left intact so its rightful owner can still use it."""
+    config_entry = _handoff_entry("someone-elses-token", creator="a-different-user")
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {"id": 1, "type": "lightener/resolve_handoff", "token": "someone-elses-token"}
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "forbidden_handoff"
+
+    # Refusal must not consume the token.
+    ledger = await _handoff_store(hass).async_load() or {}
+    assert "someone-elses-token" in ledger

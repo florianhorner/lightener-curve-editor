@@ -22,7 +22,26 @@ const thisDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(thisDir, '../../../tests/fixtures/membership_errors_v1.json');
 const CONTRACT = JSON.parse(readFileSync(fixturePath, 'utf-8')) as {
   version: number;
-  errors: Record<string, { copy: 'dedicated' | 'backend' | 'preferred'; meaning: string }>;
+  errors: Record<
+    string,
+    {
+      copy: 'dedicated' | 'backend' | 'preferred';
+      batch_command: boolean;
+      meaning: string;
+    }
+  >;
+};
+
+// The dialog only ever calls lightener/set_controlled_lights, so a code the
+// batch command cannot return is unreachable from here and is pinned on the
+// Python side alone. See the fixture comment and README's error table.
+const REACHABLE = Object.entries(CONTRACT.errors).filter(([, entry]) => entry.batch_command);
+
+// Copy the dialog owns for a `preferred` code when the backend sends none.
+// Keyed by code so declaring a second preferred code fails loudly here rather
+// than silently asserting the wrong string.
+const PREFERRED_FALLBACKS: Record<string, string> = {
+  disabled_entity: UI.membership.disabledError,
 };
 
 type Dialog = HTMLElement & {
@@ -143,7 +162,15 @@ describe('membership error contract (frontend vs shared fixture)', () => {
     expect(Object.keys(BACKEND_MESSAGES).sort()).toEqual(Object.keys(CONTRACT.errors).sort());
   });
 
-  for (const [code, entry] of Object.entries(CONTRACT.errors)) {
+  it('knows the dialog copy for every preferred code', () => {
+    const preferred = Object.entries(CONTRACT.errors)
+      .filter(([, entry]) => entry.copy === 'preferred')
+      .map(([code]) => code)
+      .sort();
+    expect(preferred).toEqual(Object.keys(PREFERRED_FALLBACKS).sort());
+  });
+
+  for (const [code, entry] of REACHABLE) {
     it(`shows actionable copy for "${code}"`, async () => {
       const dialog = await mountWithFailingApply(new WsError(code, BACKEND_MESSAGES[code]));
       await applyAChange(dialog);
@@ -167,14 +194,14 @@ describe('membership error contract (frontend vs shared fixture)', () => {
     });
   }
 
-  for (const [code, entry] of Object.entries(CONTRACT.errors)) {
+  for (const [code, entry] of REACHABLE) {
     if (entry.copy !== 'preferred') continue;
     it(`still explains "${code}" when the backend sends no message`, async () => {
       const dialog = await mountWithFailingApply(new WsError(code, ''));
       await applyAChange(dialog);
 
       const rendered = dialog.renderRoot.querySelector('.apply-error')!.textContent!.trim();
-      expect(rendered).toBe(UI.membership.disabledError);
+      expect(rendered).toBe(PREFERRED_FALLBACKS[code]);
       expect(rendered).not.toBe(UI.membership.applyError);
     });
   }

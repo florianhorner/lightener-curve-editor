@@ -1270,3 +1270,38 @@ async def test_transaction_reports_not_found_when_the_entry_vanishes_after_reloa
 
     assert err.value.code == "not_found"
     assert "after reload" in err.value.message
+
+
+async def test_add_light_past_the_cap_reports_too_many(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """`too_many` is reachable where the member list is built server-side.
+
+    The batch command cannot reach it (its schema bounds the list at the same
+    limit, see test_too_many_is_handler_side_not_reachable_over_the_batch_command
+    and the README error table). add_light appends to the stored membership, so
+    no schema bound applies and the domain rule is what answers.
+    """
+    await _setup_lightener(
+        hass,
+        {
+            f"light.member_{index}": {"brightness": {"100": "100"}}
+            for index in range(MAX_CONTROLLED_LIGHTS)
+        },
+    )
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {
+            "id": 1,
+            "type": "lightener/add_light",
+            "entity_id": "light.membership",
+            "controlled_entity_id": "light.test1",
+        }
+    )
+    result = await ws.receive_json()
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "too_many"
+    assert result["error"]["message"] == (
+        f"A Lightener group can control at most {MAX_CONTROLLED_LIGHTS} lights"
+    )
