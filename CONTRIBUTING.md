@@ -88,7 +88,9 @@ tests/                         # pytest — backend unit tests
 - Python 3.13 for local backend testing (the repo `.venv` runtime). Ruff and Mypy
   intentionally target py312 for tooling compatibility — that 3.13-vs-3.12 split is
   expected, not a mismatch.
-- Node.js 20+
+- Node.js 20.19+, 22.13+, or 24+ — the range the frontend devDependencies already
+  require (`jsdom` 29 is the tightest, `vite` 8 close behind). Node 21, Node 23,
+  and Node 22.12-or-older warn `EBADENGINE` on `npm ci`.
 - Home Assistant is optional for unit and browser work. Use the isolated
   `scripts/develop` instance only for the explicit live-proof lane.
 

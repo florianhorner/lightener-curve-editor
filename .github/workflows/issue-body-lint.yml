@@ -1,0 +1,35 @@
+name: issue-body-lint
+
+# Editorial boundary for maintainer-authored issue bodies. The same boundary
+# that governs PR bodies and public changelogs: issues on a public tracker are
+# product copy, not a place for review archaeology or agent provenance.
+#
+# Outside contributors are never linted. Their bug reports are not held to a
+# maintainer's editorial standard, and the author guard below is what enforces
+# that.
+#
+# Failure is deliberately quiet: a red X in the Actions tab and the author's own
+# notification, nothing else. No bot comment and no label, because publicly
+# flagging an editorial violation would itself put process narrative on the
+# tracker.
+
+on:
+  issues:
+    types: [opened, edited]
+
+concurrency:
+  group: issue-body-lint-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    if: github.event.issue.user.login == 'florianhorner'
+    # Required, not optional. A called workflow's permissions can only be
+    # maintained or reduced, never elevated, and an attempted elevation is
+    # refused at startup with no logs and no check run to inspect.
+    permissions:
+      contents: read
+      actions: read
+    uses: florianhorner/gh-workflows/.github/workflows/body-lint.yml@fde64f42deb15511c2c71cb9798c2d6685379e38 # v1.5
+    with:
+      target: issue-body

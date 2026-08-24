@@ -23,6 +23,7 @@ jobs:
       - name: "Checkout the repository"
         uses: "actions/checkout@v4"
         with:
+          persist-credentials: false
           fetch-depth: 0 # full history so the demo freshness gate can diff sources
 
       - name: "Assert the tag is on the right release line"
@@ -65,7 +66,7 @@ jobs:
           fi
 
       - name: "Set up Node.js"
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: "npm"
@@ -126,7 +127,7 @@ jobs:
           echo "✓ ZIP structure valid — manifest.json at root, no nested paths"
 
       - name: "Upload the ZIP file to the release"
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           files: ${{ github.workspace }}/custom_components/lightener_studio/lightener.zip
 

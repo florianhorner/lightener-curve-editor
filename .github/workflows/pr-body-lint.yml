@@ -1,0 +1,35 @@
+name: pr-body-lint
+
+# Editorial boundary for PR bodies: public bodies describe user-visible
+# outcomes. Review archaeology, agent provenance, operator telemetry and
+# process narrative belong in the private durable record.
+#
+# Patterns live in florianhorner/gh-workflows and match the grammatical SHAPE of
+# a violation rather than a literal phrase, so a paraphrase of a banned class
+# does not walk through. This repo carries no scripts/lint-patterns.sh, so the
+# shared baseline applies alone; add that file and pass it as `extra_patterns`
+# to layer repo-specific rules on top.
+#
+# The reusable workflow checks out the caller's BASE ref, so a pull request
+# cannot weaken the gate that is judging it in the same change.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, ready_for_review]
+
+concurrency:
+  group: pr-body-lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    # Required, not optional. A called workflow's permissions can only be
+    # maintained or reduced relative to the caller, never elevated, and an
+    # attempted elevation is refused before anything runs: startup_failure,
+    # with no logs and no check run to inspect.
+    permissions:
+      contents: read
+      actions: read
+    uses: florianhorner/gh-workflows/.github/workflows/body-lint.yml@fde64f42deb15511c2c71cb9798c2d6685379e38 # v1.5
+    with:
+      target: pr-body

@@ -110,10 +110,20 @@ def validate_membership_selection(
 
     entity_registry = async_get(hass)
     for entity_id in controlled_entity_ids:
-        if not entity_id.startswith("light."):
-            raise MembershipError("not_a_light", f"{entity_id} is not a light entity")
+        # Self-reference is the one rule a retained member cannot buy its way
+        # out of: keeping it would make the group control itself.
         if entity_id == group_entity_id:
             raise MembershipError("self_reference", "A Lightener cannot control itself")
+        if entity_id in existing_entities:
+            # Persisted members remain retainable even if HA disabled or removed
+            # them, or if they could not be granted today — a v1-YAML group may
+            # already nest another Lightener, and re-validating it here would
+            # reject every unrelated edit to that group. Only a new membership
+            # grant is rejected below.
+            continue
+
+        if not entity_id.startswith("light."):
+            raise MembershipError("not_a_light", f"{entity_id} is not a light entity")
         registry_entry = entity_registry.async_get(entity_id)
         if (
             registry_entry is not None
@@ -124,11 +134,6 @@ def validate_membership_selection(
                 "recursive_lightener",
                 "A Lightener group cannot control another Lightener group",
             )
-        if entity_id in existing_entities:
-            # Persisted members remain retainable even if HA disabled or removed
-            # them. Only a new membership grant is rejected below.
-            continue
-
         if registry_entry is not None and registry_entry.disabled_by is not None:
             raise MembershipError(
                 MEMBERSHIP_ERROR_DISABLED_ENTITY,

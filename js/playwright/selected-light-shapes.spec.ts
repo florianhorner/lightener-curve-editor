@@ -149,6 +149,7 @@ test.describe('selected-light Shapes flow (real browser)', () => {
   test('initial load keeps selected-light shape chips hidden until selection', async ({ page }) => {
     await page.goto(FIXTURE);
     await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+    await waitForCard(page);
 
     const snap = await readSnapshot(page);
     expect(snap.hasPanel).toBe(false);
@@ -175,6 +176,7 @@ test.describe('selected-light Shapes flow (real browser)', () => {
   }) => {
     await page.goto(FIXTURE);
     await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+    await waitForCard(page);
     await selectLight(page, 'light.a');
 
     await page.locator('.preset-option[data-preset="night_mode"]').hover();
@@ -220,6 +222,7 @@ test.describe('selected-light Shapes flow (real browser)', () => {
     await page.setViewportSize({ width: 1100, height: 820 });
     await page.goto(FIXTURE);
     await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+    await waitForCard(page);
     await selectLight(page, 'light.a');
 
     await page.locator('.preset-option[data-preset="night_mode"]').hover();
@@ -242,6 +245,7 @@ test.describe('selected-light Shapes flow (real browser)', () => {
   test('clicking a shape applies it to the selected light only', async ({ page }) => {
     await page.goto(FIXTURE);
     await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+    await waitForCard(page);
     await selectLight(page, 'light.a');
 
     await page.locator('.preset-option[data-preset="dim_accent"]').click();
@@ -270,6 +274,7 @@ test.describe('selected-light Shapes flow (real browser)', () => {
   }) => {
     await page.goto(FIXTURE);
     await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+    await waitForCard(page);
     await selectLight(page, 'light.a');
 
     await page.locator('.preset-option[data-preset="dim_accent"]').click();
@@ -320,6 +325,7 @@ test.describe('selected-light Shapes flow (real browser)', () => {
   test('hovering light rows keeps row and card height stable', async ({ page }) => {
     await page.goto(FIXTURE);
     await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+    await waitForCard(page);
 
     const before = await page.evaluate(() => {
       const card = window.__LIGHTENER_CARD_ELEMENT__!;
@@ -355,6 +361,7 @@ test.describe('selected-light Shapes flow (real browser)', () => {
     await page.setViewportSize({ width: 360, height: 760 });
     await page.goto(FIXTURE);
     await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+    await waitForCard(page);
     await selectLight(page, 'light.a');
 
     const layout = await page.evaluate(() => {
@@ -555,6 +562,7 @@ for (const { name, device } of TOUCH_DEVICES) {
     }) => {
       await page.goto(FIXTURE);
       await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+      await waitForCard(page);
       await selectLight(page, 'light.a');
       await scrollGraphIntoView(page);
 
@@ -588,6 +596,7 @@ for (const { name, device } of TOUCH_DEVICES) {
       // paint order and not intercepting drags meant for an existing point.
       await page.goto(FIXTURE);
       await page.evaluate(() => window.__LIGHTENER_CARD_READY__);
+      await waitForCard(page);
       await selectLight(page, 'light.a');
       await scrollGraphIntoView(page);
 

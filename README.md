@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <sub>Coming next: per-light <strong>color temperature</strong> curves — <a href="https://florianhorner.github.io/lightener-studio/color-temp-demo.html">try the interactive preview</a></sub>
+  <sub>Tell us what your lights did when you turned the dial — <a href="https://github.com/florianhorner/lightener-studio/blob/master/docs/OPEN-ROOM-LAB.md"><strong>Open Room Lab</strong></a></sub>
 </p>
 
 <p align="center">
@@ -236,9 +236,18 @@ and rejects stale observations rather than overwriting a concurrent edit.
 |---|---|
 | `conflict` | The group changed after the client loaded it. Reopen Edit lights and retry from the new snapshot. |
 | `disabled_entity` | A newly added entity is disabled. Enable it under **Settings → Devices & services → Entities**, reopen Edit lights, and retry. |
-| `empty_selection` / `too_many` / `duplicate` | The desired member list violates the batch-selection contract. Correct the payload and retry. |
-| `not_a_light` / `self_reference` / `recursive_lightener` / `not_found` | A submitted ID is not an eligible controlled light. Refresh candidates and correct the ID. |
+| `empty_selection` / `duplicate` | The desired member list violates the batch-selection contract. Correct the payload and retry. |
+| `not_a_light` / `self_reference` / `recursive_lightener` | A submitted ID is not eligible as a controlled light. Refresh candidates and correct the ID. |
+| `not_found` | Covers three cases. A submitted member ID no longer resolves, so refresh candidates and correct it. Or the addressed Lightener entity is gone, or its config entry is. In the last two the group itself no longer exists, so close the editor. |
 | `reload_failed` / `rollback_reload_failed` | Home Assistant could not apply or fully restore the runtime. Keep the dialog state, inspect integration logs, and retry only after the runtime is healthy. |
+
+`too_many` is not reachable on this command. The websocket schema bounds
+`controlled_entity_ids` at the same 100-entry limit the handler enforces, so
+Home Assistant rejects an oversized list with its own generic schema error
+before `MAX_CONTROLLED_LIGHTS` is consulted. The code stays live on the two
+paths that build the member list server-side, where no schema bound applies:
+`lightener/add_light` appending to a group already at the limit, and the
+config/options flow.
 
 `disabled_entity` is checked again inside the membership lock, so a light
 disabled after the dialog loaded is still rejected. The exact backend message
@@ -269,6 +278,7 @@ console.log(curves);
 
 ## Documentation
 
+- [docs/OPEN-ROOM-LAB.md](docs/OPEN-ROOM-LAB.md) — where things stand today, and how to report what your room did with a curve
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — local setup, tooling, and workflow
 - [SECURITY.md](SECURITY.md) — vulnerability reporting policy
