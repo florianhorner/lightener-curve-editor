@@ -1,4 +1,12 @@
 export const LIGHTENER_ENTITY = 'light.preview_lightener';
+export const CANDIDATE_STATE_METADATA_VERSION = 1;
+
+// Exported so `js/src/utils/demo-contract.test.ts` can check the rendered
+// sentence against tests/fixtures/candidate_lights_v1.json, the shared contract
+// pin, rather than scrape this file's source.
+export const disabledEntityMessage = (entityId) =>
+  `Could not add ${entityId} because it is disabled in Home Assistant. ` +
+  'Enable it under Settings → Devices & services → Entities, reopen Edit lights, and try again.';
 
 const COLORS = [
   '#42a5f5',
@@ -30,11 +38,13 @@ const AVAILABLE_LIGHTS = [
     entityId: 'light.available_wall_sconce',
     friendlyName: 'Available Wall Sconce',
     areaId: 'living_room',
+    hidden: true,
   },
   {
     entityId: 'light.available_kitchen_spot',
     friendlyName: 'Available Kitchen Spot',
     areaId: 'kitchen',
+    disabled: true,
   },
   {
     entityId: 'light.unavailable_spare',
@@ -275,9 +285,45 @@ function eligibleLightIds(states, backendEntities, lightenerEntityIds, areaId) {
     .sort();
 }
 
+function candidateLightIds(states, backendEntities, lightenerEntityIds) {
+  return [
+    ...new Set([
+      ...AVAILABLE_LIGHTS.map((light) => light.entityId),
+      ...Object.keys(states).filter((entityId) => isLightEntity(entityId)),
+      ...Object.keys(backendEntities),
+    ]),
+  ]
+    .filter((entityId) => !lightenerEntityIds.has(entityId))
+    .sort();
+}
+
 export function createPreviewHass(options = {}) {
   let backendEntities = {};
   const lightenerEntityIds = new Set([LIGHTENER_ENTITY, ...(options.lightenerEntityIds ?? [])]);
+  const candidateMetadata = new Map(
+    AVAILABLE_LIGHTS.map((light) => [
+      light.entityId,
+      {
+        name: light.friendlyName,
+        areaId: light.areaId ?? null,
+        hidden: Boolean(light.hidden),
+        disabled: Boolean(light.disabled),
+      },
+    ])
+  );
+  for (const [entityId, metadata] of Object.entries(options.candidateMetadata ?? {})) {
+    candidateMetadata.set(entityId, {
+      ...(candidateMetadata.get(entityId) ?? {}),
+      ...metadata,
+    });
+  }
+
+  function membershipError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
   const hass = {
     user: { is_admin: options.admin !== false },
     states: buildStates([]),
@@ -306,6 +352,12 @@ export function createPreviewHass(options = {}) {
       }
       if (msg.type === 'lightener/add_light') {
         const id = msg.controlled_entity_id;
+        if (!Object.prototype.hasOwnProperty.call(backendEntities, id)) {
+          const metadata = candidateMetadata.get(id);
+          if (metadata?.disabled) {
+            throw membershipError('disabled_entity', disabledEntityMessage(id));
+          }
+        }
         const label = id.replace(/^light\./, '').replace(/_/g, ' ');
         hass.states[id] = hass.states[id] ?? lightState(titleCase(label));
         backendEntities[id] = {
@@ -325,25 +377,31 @@ export function createPreviewHass(options = {}) {
         };
       }
       if (msg.type === 'lightener/list_candidate_lights') {
-        const candidateIds = [
-          ...new Set([
-            ...eligibleLightIds(hass.states, backendEntities, lightenerEntityIds),
-            ...Object.keys(backendEntities),
-          ]),
-        ].sort();
+        const candidateIds = candidateLightIds(hass.states, backendEntities, lightenerEntityIds);
         return {
+          capabilities: {
+            candidate_state_metadata: CANDIDATE_STATE_METADATA_VERSION,
+          },
           observed_controlled_entity_ids: Object.keys(backendEntities),
           lights: candidateIds.map((entityId) => {
             const stateObj = hass.states[entityId];
-            const areaId = stateObj?.attributes?.area_id ?? null;
+            const metadata = candidateMetadata.get(entityId);
+            const areaId = stateObj?.attributes?.area_id ?? metadata?.areaId ?? null;
             return {
               entity_id: entityId,
               name:
                 stateObj?.attributes?.friendly_name ??
+                metadata?.name ??
                 titleCase(entityId.replace(/^light\./, '').replace(/_/g, ' ')),
-              available: isAvailableState(stateObj),
+              available: Boolean(isAvailableState(stateObj)),
               area_id: areaId,
               area_name: areaId ? titleCase(areaId.replace(/_/g, ' ')) : null,
+              hidden: Boolean(metadata?.hidden),
+              disabled: Boolean(metadata?.disabled),
+              missing:
+                Object.prototype.hasOwnProperty.call(backendEntities, entityId) &&
+                !stateObj &&
+                !metadata,
             };
           }),
         };
@@ -351,6 +409,12 @@ export function createPreviewHass(options = {}) {
       if (msg.type === 'lightener/set_controlled_lights') {
         const before = Object.keys(backendEntities);
         const selected = msg.controlled_entity_ids;
+        const disabledEntity = selected.find(
+          (entityId) => !before.includes(entityId) && candidateMetadata.get(entityId)?.disabled
+        );
+        if (disabledEntity) {
+          throw membershipError('disabled_entity', disabledEntityMessage(disabledEntity));
+        }
         const next = {};
         for (const entityId of selected) {
           next[entityId] = backendEntities[entityId] ?? {
