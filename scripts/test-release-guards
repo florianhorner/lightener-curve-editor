@@ -12,6 +12,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ASSERT="$SCRIPT_DIR/assert-release-ref"
+ASSERT_VERSION="$SCRIPT_DIR/assert-release-version"
 DEMO="$SCRIPT_DIR/demo-freshness-check"
 RL="$SCRIPT_DIR/release-line"
 
@@ -101,6 +102,24 @@ unset RELEASE_PRERELEASE
 # Argument handling.
 record 2 "$(run "$ASSERT")"        "no tag argument (indeterminate)"
 record 0 "$(run "$ASSERT" --help)" "--help exits 0"
+
+# ===========================================================================
+echo "assert-release-version:"
+RV="$TMP/rv"; mkdir -p "$RV/custom_components/lightener_studio"; cd "$RV"
+gitinit
+printf '{"version":"2.17.3"}\n' > custom_components/lightener_studio/manifest.json
+git add custom_components/lightener_studio/manifest.json; git commit -q -m manifest
+
+export RELEASE_PRERELEASE=false
+record 0 "$(run "$ASSERT_VERSION" v2.17.3)" "stable tag matches committed version"
+record 1 "$(run "$ASSERT_VERSION" v2.17.4)" "stable tag rejects stale committed version"
+export RELEASE_PRERELEASE=true
+record 0 "$(run "$ASSERT_VERSION" v2.17.3-beta.0)" "beta tag accepts matching stable core"
+record 1 "$(run "$ASSERT_VERSION" v2.17.4-beta.0)" "beta tag rejects a different stable core"
+unset RELEASE_PRERELEASE
+record 2 "$(run "$ASSERT_VERSION" v2.17.3)" "missing prerelease flag is indeterminate"
+record 2 "$(run "$ASSERT_VERSION" banana)" "malformed tag is indeterminate"
+record 0 "$(run "$ASSERT_VERSION" --help)" "--help exits 0"
 
 # ===========================================================================
 # release-line is the SSOT both the guard AND the release.yml gh-pages deploy

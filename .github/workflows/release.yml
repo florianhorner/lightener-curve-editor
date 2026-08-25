@@ -72,19 +72,25 @@ jobs:
           cache: "npm"
           cache-dependency-path: js/package-lock.json
 
-      - name: "Adjust version number"
+      - name: "Verify and adjust version number"
         shell: "bash"
         env:
           TAG_NAME: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Invalid tag format: $TAG_NAME — must match vX.Y.Z[-prerelease][+build]"
             exit 1
           fi
+          scripts/assert-release-version "$TAG_NAME"
           export VERSION="${TAG_NAME#v}"
-          yq -i -o json '.version = strenv(VERSION)' \
-            "${{ github.workspace }}/custom_components/lightener_studio/manifest.json"
-          echo "manifest.json version set to $VERSION"
+          if [ "$RELEASE_PRERELEASE" = "true" ]; then
+            yq -i -o json '.version = strenv(VERSION)' \
+              "${{ github.workspace }}/custom_components/lightener_studio/manifest.json"
+            echo "manifest.json version set to $VERSION for the prerelease package"
+          else
+            echo "manifest.json already committed at stable version $VERSION"
+          fi
 
       - name: "Sync CARD_VERSION in panel JS"
         shell: "bash"
@@ -99,6 +105,16 @@ jobs:
         shell: "bash"
         working-directory: "${{ github.workspace }}/js"
         run: npm run build
+
+      - name: "Verify stable release tree was committed in sync"
+        if: ${{ github.event.release.prerelease == false }}
+        shell: "bash"
+        run: |
+          if ! git diff --quiet; then
+            echo "::error::The stable release tag does not contain synchronized version markers and generated bundles. Commit scripts/sync-version and npm run build output before publishing."
+            git --no-pager diff --stat
+            exit 1
+          fi
 
       - name: "ZIP the integration directory"
         shell: "bash"

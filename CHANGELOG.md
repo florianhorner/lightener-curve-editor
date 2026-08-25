@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.17.3] - 2026-08-25
+
+A reliability release for the edit-lights flow and membership writes. Groups
+carried over from older setups can be edited again, disabled entities are
+blocked on add, and the picker recovers cleanly from slow or failed loads
+without losing focus or masking a failed curve save.
+
+### Changed
+
+- **The minimum Home Assistant version is now correctly declared as 2024.8.0.** Lightener Studio's setup flow uses Home Assistant's form-section API, so HACS no longer offers the integration to older versions where setup cannot load.
+
 ### Added
 
 - **Edit lights can now focus the list without hiding problems.** The picker keeps current members in a stable dialog-open group, adds `Current group only`, and puts hidden or disabled non-members behind an explicit disclosure. Hidden, disabled, missing, and unavailable states stay distinct, filters never change pending membership, and the dialog preserves work across retryable failures.

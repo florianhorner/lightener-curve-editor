@@ -54,6 +54,7 @@ echo "[setup-python] Installing dependencies..."
 # test stack; requirements.txt installs second to override pytest to its own pin.
 uv pip install --python .venv/bin/python -r requirements-ha-test.txt
 uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python scripts/check-ha-runtime-pins
 CC=gcc CXX=g++ uv pip install \
     --python .venv/bin/python \
     -r requirements-ha-runtime.txt

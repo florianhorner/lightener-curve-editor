@@ -81,9 +81,12 @@ release contents; `assert-release-ref` enforces that the tag is on the right *li
 - `git fetch origin && git log origin/master..HEAD` — never trust local master.
 - `gh pr list` — confirm no duplicate-scope PR is already in flight from a
   sibling Conductor worktree.
-- Version sync: `scripts/sync-version` runs clean. `manifest.json` "version",
+- Version sync: the deliberate release PR sets `manifest.json` to the stable
+  version being prepared, then `scripts/sync-version` runs clean. The
+  `manifest.json` version,
   `CARD_VERSION` in `js/src/lightener-curve-card.ts`, and `CARD_VERSION` in
   `custom_components/lightener_studio/frontend/lightener-panel.js` all agree.
+  `RELEASE_PRERELEASE=false scripts/assert-release-version vX.Y.Z` must pass.
 - Frontend bundles rebuilt and present (run from `js/`):
   `custom_components/lightener_studio/frontend/lightener-curve-card.js`,
   `custom_components/lightener_studio/frontend/lightener-panel.js`,
@@ -208,13 +211,15 @@ the PR's runtime artifact note.
    Author must be `florianhorner`, base must be `master`, head must match
    the expected feature branch, mergeStateStatus must be `CLEAN`. Refuse
    if any field is unexpected. Then land with `--delete-branch`.
-4. Cut the GitHub release with tag `vX.Y.Z[-prerelease][+build]`. Do NOT
-   pre-bump `manifest.json` by hand — `release.yml` patches it from the tag
-   and runs `scripts/sync-version`.
-5. Watch `release.yml` to completion: zip built from inside
+4. In the release PR, set `manifest.json` to the stable `X.Y.Z`, run
+   `scripts/sync-version`, rebuild the frontend, and commit all generated bundles.
+   A prerelease tag may add `-beta.N` to the packaged version, but the stable tag
+   is rejected unless the committed tree already carries the exact stable version.
+5. Cut the GitHub release with tag `vX.Y.Z[-prerelease][+build]`.
+6. Watch `release.yml` to completion: zip built from inside
    `custom_components/lightener_studio/`, structure validated (no `custom_components/`
    prefix), asset uploaded, `docs/` deployed to `gh-pages`.
-6. Verify the demo at
+7. Verify the demo at
    `https://florianhorner.github.io/lightener-studio/` matches the
    shipped bundle by comparing SHA-256 across three sources: the local
    `docs/lightener-curve-card.js` on the release SHA, the bundle inside
@@ -222,10 +227,10 @@ the PR's runtime artifact note.
    `https://florianhorner.github.io/lightener-studio/lightener-curve-card.js`.
    All three hashes must agree. Any divergence = poisoned release; halt
    and hand to Florian.
-7. WAIT for Florian's explicit signal before declaring shipped on a live HA.
-8. On signal: confirm HACS picks up the new version, install on a test HA,
+8. WAIT for Florian's explicit signal before declaring shipped on a live HA.
+9. On signal: confirm HACS picks up the new version, install on a test HA,
    verify integration loads (`manifest/get` via websocket succeeds).
-9. Post release note: what shipped, what to watch in HA logs, rollback
+10. Post release note: what shipped, what to watch in HA logs, rollback
    command (downgrade in HACS to previous version). **Attribution:** the
    release body, blog post, and any forum / Discussions announcement must use
    the canonical attribution line from `README.md` ("Built on the Lightener
@@ -235,11 +240,11 @@ the PR's runtime artifact note.
    (Attribution section). In-repo docs are checked by `scripts/lint-attribution`,
    and CI also checks the GitHub repo description via `gh repo view`; keep both
    matching the canonical line.
-10. Append a release-decision trace to `.context/release-log.jsonl`:
+11. Append a release-decision trace to `.context/release-log.jsonl`:
     `{ts, tag, merge_sha, squad_findings: {p0, p1, p2}, runtime_proof_url,
     demo_hash, zip_hash, local_hash, outcome}`. Write the entry whether
     the release shipped, was aborted, or rolled back.
-11. If post-release HA reports load failure (`manifest/get` errors,
+12. If post-release HA reports load failure (`manifest/get` errors,
     integration-not-found, stale-card after the TROUBLESHOOTING flow),
     do NOT restart HA, do NOT cut a patch tag reflexively. Capture the
     failing artifact (websocket response, HA log line, screenshot),
@@ -271,8 +276,9 @@ the PR's runtime artifact note.
 - Implement features. Hand back to the originating worktree.
 - Tag public releases on green CI alone — Florian's signal is required.
 - Bundle adjacent fixes "while shipping." Park them in `.context/todos.md`.
-- Bump `manifest.json` or either `CARD_VERSION` speculatively. Versions only
-  move on a deliberate release via `release.yml` patching from the tag.
+- Bump `manifest.json` or either `CARD_VERSION` speculatively. Versions move only
+  in a deliberate release PR, with synchronized generated bundles committed before
+  the tag is published.
 - Manually upload, rebuild, or replace release zip assets.
 - Restart Home Assistant. Ever. Without explicit current-message confirmation.
 - Open PRs against upstream `fredck/lightener`. All work on the fork only.

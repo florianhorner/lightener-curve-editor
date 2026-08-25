@@ -63,7 +63,7 @@ import './components/curve-legend.js';
 import './components/curve-footer.js';
 import './components/light-membership-dialog.js';
 
-const CARD_VERSION = '2.16.0';
+const CARD_VERSION = '2.17.3';
 const CANCEL_ANIM_DURATION_MS = 300;
 const DEFAULT_CURVE_GRAPH_MAX_HEIGHT_PX = 320;
 const GRAPH_PANEL_INLINE_PADDING_PX = 28;

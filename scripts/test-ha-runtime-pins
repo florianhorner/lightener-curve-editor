@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CHECK="$SCRIPT_DIR/check-ha-runtime-pins"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+run() { local got=0; "$@" >/dev/null 2>&1 || got=$?; echo "$got"; }
+record() {
+  if [[ "$1" == "$2" ]]; then
+    printf '  ok    exit=%s  %s\n' "$2" "$3"
+  else
+    printf '  FAIL  want=%s got=%s  %s\n' "$1" "$2" "$3" >&2
+    fail=1
+  fi
+}
+
+fail=0
+cat > "$TMP/constraints.txt" <<'EOF'
+Home_Assistant_Intents==2026.1.28
+PyTurboJPEG==1.8.0
+pycountry>=23.12.11
+EOF
+cat > "$TMP/runtime.txt" <<'EOF'
+home-assistant-intents==2026.1.28
+pyturbojpeg==1.8.0
+pycountry==24.6.1
+EOF
+
+echo "check-ha-runtime-pins:"
+record 0 "$(run "$CHECK" --requirements "$TMP/runtime.txt" --constraints "$TMP/constraints.txt")" "aligned overlapping exact pins"
+
+sed 's/2026.1.28/2026.7.30/' "$TMP/runtime.txt" > "$TMP/mismatch.txt"
+record 1 "$(run "$CHECK" --requirements "$TMP/mismatch.txt" --constraints "$TMP/constraints.txt")" "rejects an incompatible exact pin"
+
+printf 'unrelated==1.0\n' > "$TMP/no-overlap.txt"
+record 2 "$(run "$CHECK" --requirements "$TMP/no-overlap.txt" --constraints "$TMP/constraints.txt")" "refuses a vacuous comparison"
+record 2 "$(run "$CHECK" --requirements "$TMP/missing.txt" --constraints "$TMP/constraints.txt")" "reports a missing requirements file"
+record 0 "$(run "$CHECK" --help)" "help exits cleanly"
+
+if [[ "$fail" == 0 ]]; then
+  echo "ha-runtime-pin tests: OK"
+else
+  echo "ha-runtime-pin tests: FAILED" >&2
+fi
+exit "$fail"

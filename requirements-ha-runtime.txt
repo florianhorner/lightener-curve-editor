@@ -4,13 +4,13 @@
 # into this repository's virtualenv. Keep these pins aligned with the
 # homeassistant version in requirements-ha-test.txt.
 home-assistant-frontend==20260128.6
-PyTurboJPEG==2.5.0
+PyTurboJPEG==1.8.0
 hassil==3.5.0
-home-assistant-intents==2026.7.30
+home-assistant-intents==2026.1.28
 mutagen==1.47.0
 av==16.0.1
 ha-ffmpeg==3.2.2
 pycountry==24.6.1
 radios==0.3.2
-pymicro-vad==2.1.0
-pyspeex-noise==2.0.1
+pymicro-vad==1.0.1
+pyspeex-noise==1.0.2
