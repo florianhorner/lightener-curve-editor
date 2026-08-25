@@ -18,7 +18,7 @@ post with the GitHub account you already have.
 
 ## Where things stand
 
-*Last verified: 2026-08-19.*
+*Last verified: 2026-08-25.*
 
 Every row below can change, so every row carries a link you can check yourself.
 The block gets refreshed on a stable release, a demo deployment, or a change in
@@ -27,12 +27,12 @@ HACS state. **If today is more than 30 days past the date above, treat it as
 
 | What | Where it stands | Check it yourself |
 |---|---|---|
-| Latest stable release | `v2.17.2`, published 2026-07-18 | [releases/tag/v2.17.2](https://github.com/florianhorner/lightener-studio/releases/tag/v2.17.2) |
-| Version running in the live demo | `2.17.2` (the deployed bundle sets `__LIGHTENER_CURVE_CARD_VERSION__ = "2.17.2"`) | [the demo bundle itself](https://florianhorner.github.io/lightener-studio/lightener-curve-card.js) |
-| Source vs. release | `master` runs ahead of the last stable tag | [what's on master since v2.17.2](https://github.com/florianhorner/lightener-studio/compare/v2.17.2...master) |
+| Latest stable release | `v2.17.3`, published 2026-08-25 | [releases/tag/v2.17.3](https://github.com/florianhorner/lightener-studio/releases/tag/v2.17.3) |
+| Version running in the live demo | `2.17.3` (the deployed bundle sets `__LIGHTENER_CURVE_CARD_VERSION__ = "2.17.3"`) | [the demo bundle itself](https://florianhorner.github.io/lightener-studio/lightener-curve-card.js) |
+| Source vs. release | `master` may run ahead of the last stable tag | [what's on master since v2.17.3](https://github.com/florianhorner/lightener-studio/compare/v2.17.3...master) |
 | How you install it | HACS **custom repository** only | [Installing](https://github.com/florianhorner/lightener-studio#installing) |
-| HACS default store | **Not included.** The submission is open with changes requested (last updated 2026-08-10) | [hacs/default#8892](https://github.com/hacs/default/pull/8892) |
-| Minimum Home Assistant | 2024.2.0 | [`hacs.json`](https://github.com/florianhorner/lightener-studio/blob/master/hacs.json) |
+| HACS default store | **Not included.** The submission is open with changes requested (last reviewed 2026-08-21) | [hacs/default#8892](https://github.com/hacs/default/pull/8892) |
+| Minimum Home Assistant | 2024.8.0 | [`hacs.json`](https://github.com/florianhorner/lightener-studio/blob/master/hacs.json) |
 | Something went wrong | Upgrade and caching recovery guide | [docs/TROUBLESHOOTING.md](https://github.com/florianhorner/lightener-studio/blob/master/docs/TROUBLESHOOTING.md) |
 
 The demo version and the stable release are listed separately on purpose. A

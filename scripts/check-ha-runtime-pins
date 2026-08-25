@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Check isolated-HA runtime pins against Home Assistant's constraints."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+EXACT_PIN = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s;]+)")
+
+
+def normalize_package(name: str) -> str:
+    """Return the canonical package name used for comparisons."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def exact_pins(path: Path) -> dict[str, tuple[str, str]]:
+    """Read exact package pins as canonical name -> (display name, version)."""
+    pins: dict[str, tuple[str, str]] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        match = EXACT_PIN.match(raw_line.strip())
+        if match:
+            name, version = match.groups()
+            pins[normalize_package(name)] = (name, version)
+    return pins
+
+
+def installed_constraints_path() -> Path:
+    """Locate package_constraints.txt from the installed HA package."""
+    try:
+        import homeassistant
+    except ImportError as err:
+        raise RuntimeError(
+            "Home Assistant is not installed; run scripts/setup-python first"
+        ) from err
+    return Path(homeassistant.__file__).with_name("package_constraints.txt")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--requirements",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "requirements-ha-runtime.txt",
+    )
+    parser.add_argument("--constraints", type=Path)
+    args = parser.parse_args()
+
+    try:
+        constraints_path = args.constraints or installed_constraints_path()
+        runtime = exact_pins(args.requirements)
+        constraints = exact_pins(constraints_path)
+    except (OSError, RuntimeError) as err:
+        print(f"ha-runtime-pins: ERROR: {err}", file=sys.stderr)
+        return 2
+
+    overlap = sorted(runtime.keys() & constraints.keys())
+    if not overlap:
+        print(
+            "ha-runtime-pins: ERROR: no exact pins overlap HA constraints",
+            file=sys.stderr,
+        )
+        return 2
+
+    mismatches = [
+        (runtime[name][0], runtime[name][1], constraints[name][1])
+        for name in overlap
+        if runtime[name][1] != constraints[name][1]
+    ]
+    if mismatches:
+        for name, runtime_version, ha_version in mismatches:
+            print(
+                f"ha-runtime-pins: ERROR: {name} is {runtime_version}; "
+                f"Home Assistant requires {ha_version}",
+                file=sys.stderr,
+            )
+        return 1
+
+    print(f"ha-runtime-pins: OK ({len(overlap)} exact HA pins aligned)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

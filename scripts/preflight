@@ -50,9 +50,11 @@ if ! git diff --quiet; then
   exit 1
 fi
 
-step "Repo guards (attribution, dependabot, release-ref)"
+step "Repo guards (attribution, dependabot, release-ref, HA runtime pins)"
 scripts/lint-attribution
 python3 scripts/lint-dependabot
 scripts/test-release-guards
+scripts/test-ha-runtime-pins
+.venv/bin/python scripts/check-ha-runtime-pins
 
 printf '\n\033[1m[preflight] OK\033[0m — matches the CI gate (Playwright browser tests run in CI only).\n'

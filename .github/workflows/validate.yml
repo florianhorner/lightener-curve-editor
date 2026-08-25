@@ -79,3 +79,6 @@ jobs:
         # scripts/demo-freshness-check — builds throwaway git repos in a temp
         # dir and asserts every exit-code path. No network, no real history.
         run: scripts/test-release-guards
+
+      - name: "Test the HA runtime pin guard"
+        run: scripts/test-ha-runtime-pins

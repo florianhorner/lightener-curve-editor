@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#
+# assert-release-version - require release tags to point at compatible committed
+# version metadata. Stable tags must match manifest.json exactly. Prerelease tags
+# may package the same committed stable core with a -beta.N/-dev.N suffix.
+#
+# Exit: 0 pass, 1 violation, 2 indeterminate.
+
+set -euo pipefail
+
+violation() { printf 'assert-release-version: VIOLATION - %s\n' "$1" >&2; exit 1; }
+indeterminate() { printf 'assert-release-version: INDETERMINATE - %s\n' "$1" >&2; exit 2; }
+
+usage() {
+  cat <<'EOF'
+Usage: assert-release-version <tag>
+  env: RELEASE_PRERELEASE=true|false
+
+Stable releases require manifest.json to match the tag exactly. Prereleases
+require manifest.json to contain the same stable core version.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  "") indeterminate "missing <tag> (try --help)" ;;
+esac
+
+TAG="$1"
+if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
+  indeterminate "invalid tag format: $TAG"
+fi
+
+case "${RELEASE_PRERELEASE:-}" in
+  true|false) ;;
+  *) indeterminate "RELEASE_PRERELEASE must be true or false" ;;
+esac
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || indeterminate "not inside a git work tree"
+MANIFEST="$REPO_ROOT/custom_components/lightener_studio/manifest.json"
+[ -f "$MANIFEST" ] || indeterminate "manifest.json not found at $MANIFEST"
+
+COMMITTED_VERSION="$(python3 - "$MANIFEST" <<'PY'
+import json
+import sys
+
+try:
+    version = json.load(open(sys.argv[1], encoding="utf-8"))["version"]
+except (OSError, KeyError, TypeError, ValueError) as err:
+    print(f"cannot read manifest version: {err}", file=sys.stderr)
+    raise SystemExit(2)
+
+if not isinstance(version, str):
+    print("manifest version is not a string", file=sys.stderr)
+    raise SystemExit(2)
+
+print(version)
+PY
+)" || indeterminate "cannot read a valid version from manifest.json"
+
+VERSION="${TAG#v}"
+SOURCE_VERSION="${VERSION%%-*}"
+SOURCE_VERSION="${SOURCE_VERSION%%+*}"
+if [ "$RELEASE_PRERELEASE" = "true" ]; then
+  EXPECTED_VERSION="$SOURCE_VERSION"
+else
+  EXPECTED_VERSION="$VERSION"
+fi
+
+if [ "$COMMITTED_VERSION" != "$EXPECTED_VERSION" ]; then
+  violation "tag $TAG points at manifest version $COMMITTED_VERSION; expected $EXPECTED_VERSION"
+fi
+
+printf 'assert-release-version: OK - %s matches committed manifest version %s\n' \
+  "$TAG" "$COMMITTED_VERSION"
