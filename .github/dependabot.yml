@@ -11,6 +11,12 @@
 # pip deps are in root requirements files, and there is no Dockerfile — so only
 # npm, pip, and github-actions are tracked.
 #
+# The pip `ignore` list is load-bearing too: requirements-ha-runtime.txt mirrors
+# Home Assistant's own package_constraints.txt, and scripts/check-ha-runtime-pins
+# fails CI when the two disagree. Dependabot bumping any of those pins produces a
+# PR that can never go green. None of the 11 names appear in requirements.txt or
+# requirements-ha-test.txt, so ignoring them blocks nothing else.
+#
 # Spec: https://github.com/florianhorner/engineering-standards/blob/main/specs/commit-message-spec.md#bot-allowlist
 # BEGIN: commit-message-standards
 version: 2
@@ -34,6 +40,20 @@ updates:
       prefix: "chore"
       prefix-development: "chore"
       include: "scope"
+    # Pinned to match Home Assistant's package_constraints.txt — HA owns these
+    # versions, not Dependabot. See requirements-ha-runtime.txt.
+    ignore:
+      - dependency-name: "home-assistant-frontend"
+      - dependency-name: "PyTurboJPEG"
+      - dependency-name: "hassil"
+      - dependency-name: "home-assistant-intents"
+      - dependency-name: "mutagen"
+      - dependency-name: "av"
+      - dependency-name: "ha-ffmpeg"
+      - dependency-name: "pycountry"
+      - dependency-name: "radios"
+      - dependency-name: "pymicro-vad"
+      - dependency-name: "pyspeex-noise"
 
   - package-ecosystem: "github-actions"
     directory: "/"
