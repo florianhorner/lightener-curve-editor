@@ -15,11 +15,20 @@ Three classes of bug this catches that a plain `yaml.safe_load` does NOT:
 3. A phantom ecosystem (docker with no Dockerfile anywhere) that is a permanent
    no-op.
 
+4. A pip `ignore:` list that has drifted from the pins in
+   requirements-ha-runtime.txt. Those pins are owned by Home Assistant's own
+   package_constraints.txt, so a Dependabot bump of any of them opens a PR that
+   check-ha-runtime-pins can never let go green. The list lives INSIDE the
+   BEGIN/END region that bootstrap-repo.sh replaces in place, so without this
+   check a bootstrap run deletes it silently and every guard stays green until
+   an unrelated PR goes red weeks later.
+
 Exit non-zero with a precise message on any of these.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -27,6 +36,8 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 CONFIG = REPO / ".github" / "dependabot.yml"
+HA_RUNTIME = REPO / "requirements-ha-runtime.txt"
+EXACT_PIN = re.compile(r"^([A-Za-z0-9_.-]+)==")
 
 # ecosystem -> list of acceptable manifest filenames under the declared directory.
 # At least one must exist for the directory to be "real".
@@ -137,8 +148,52 @@ def main() -> None:
                     f"(expected one of {patterns}). Updates would never fire."
                 )
 
+    # 4. The pip ignore list must still name every HA-owned runtime pin.
+    ignored_report = "no pip ecosystem"
+    for entry in updates:
+        if entry.get("package-ecosystem") != "pip":
+            continue
+        ignored = [
+            i.get("dependency-name")
+            for i in (entry.get("ignore") or [])
+            if isinstance(i, dict)
+        ]
+        if not HA_RUNTIME.exists():
+            fail(
+                f"{HA_RUNTIME.name} is missing; the pip 'ignore:' list has nothing "
+                "to stay in sync with"
+            )
+        pinned = [
+            m.group(1)
+            for m in (
+                EXACT_PIN.match(line.strip())
+                for line in HA_RUNTIME.read_text(encoding="utf-8").splitlines()
+            )
+            if m
+        ]
+        missing = [name for name in pinned if name not in ignored]
+        if missing:
+            fail(
+                "pip 'ignore:' is missing "
+                + ", ".join(missing)
+                + f" — every exact pin in {HA_RUNTIME.name} must be ignored, or "
+                "Dependabot opens a bump that check-ha-runtime-pins can never pass. "
+                "If a bootstrap run replaced the BEGIN/END region, restore the list."
+            )
+        stale = [name for name in ignored if name not in pinned]
+        if stale:
+            fail(
+                "pip 'ignore:' names "
+                + ", ".join(stale)
+                + f" which is no longer pinned in {HA_RUNTIME.name}; drop it so real "
+                "updates are not blocked"
+            )
+        ignored_report = f"{len(ignored)} HA-owned pin(s) ignored"
+        break
+
     print(
-        f"dependabot-lint: OK — {len(updates)} ecosystem(s), all directories resolve."
+        f"dependabot-lint: OK — {len(updates)} ecosystem(s), all directories "
+        f"resolve, {ignored_report}."
     )
 
 

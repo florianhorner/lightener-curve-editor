@@ -55,6 +55,7 @@ scripts/lint-attribution
 python3 scripts/lint-dependabot
 scripts/test-release-guards
 scripts/test-ha-runtime-pins
+scripts/test-lint-dependabot
 .venv/bin/python scripts/check-ha-runtime-pins
 
 printf '\n\033[1m[preflight] OK\033[0m — matches the CI gate (Playwright browser tests run in CI only).\n'

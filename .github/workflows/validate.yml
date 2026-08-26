@@ -82,3 +82,6 @@ jobs:
 
       - name: "Test the HA runtime pin guard"
         run: scripts/test-ha-runtime-pins
+
+      - name: "Test the dependabot config guard"
+        run: scripts/test-lint-dependabot
