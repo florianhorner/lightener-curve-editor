@@ -1052,11 +1052,9 @@ async def test_lightener_issue_97(hass: HomeAssistant, create_lightener):
     assert hass.states.get("light.test1").attributes["brightness"] == 255
 
 
-async def test_turn_on_records_the_error_and_unfreezes_on_failure(
-    hass: HomeAssistant, create_lightener
-):
-    """A failure while building the service calls must propagate, unfreeze the
-    Lightener, and still close the observability span."""
+async def test_turn_on_unfreezes_on_failure(hass: HomeAssistant, create_lightener):
+    """A failure while building the service calls must propagate and unfreeze
+    the Lightener so member state changes are not ignored afterwards."""
     lightener: LightenerLight = await create_lightener(
         config={
             "friendly_name": "Test",
