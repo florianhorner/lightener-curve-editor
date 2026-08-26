@@ -45,6 +45,10 @@ branch = true
 # Keep ~3-6pp cushion above baseline to avoid flakes on small
 # refactors. Raise when baseline moves.
 fail_under = 94
+# Load-bearing, not cosmetic: coverage compares round(total, precision)
+# against fail_under, and precision defaults to 0. Without this line a
+# 93.50% run rounds to 94 and passes a floor of 94.
+precision = 2
 show_missing = true
 exclude_lines = [
     "pragma: no cover",

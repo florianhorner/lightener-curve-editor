@@ -60,11 +60,6 @@ def _handoff_entry(token: str, *, creator: str | None) -> MockConfigEntry:
     )
 
 
-def _handoff_store(hass: HomeAssistant):
-    """The handoff ledger store, for asserting what a call consumed."""
-    return _store(hass)
-
-
 async def test_get_curves_returns_entities(hass: HomeAssistant, hass_ws_client) -> None:
     """Test ws_get_curves returns the entities dict from the config entry."""
     entities = {
@@ -1492,20 +1487,7 @@ async def test_resolve_handoff_consumes_the_token_once(
     hass: HomeAssistant, hass_ws_client
 ) -> None:
     """The websocket wrapper resolves a handoff and consumes it exactly once."""
-    config_entry = MockConfigEntry(
-        domain=DOMAIN,
-        version=LightenerConfigFlow.VERSION,
-        unique_id=str(uuid4()),
-        data={
-            "friendly_name": "Handoff",
-            "entities": {"light.test1": {"brightness": {"100": "100"}}},
-            ENTRY_HANDOFF_KEY: {
-                "token": "ws-token",
-                "creator_user_id": None,
-                "issued_at": time(),
-            },
-        },
-    )
+    config_entry = _handoff_entry("ws-token", creator=None)
     config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
@@ -1593,5 +1575,5 @@ async def test_resolve_handoff_refuses_another_users_token(
     assert result["error"]["code"] == "forbidden_handoff"
 
     # Refusal must not consume the token.
-    ledger = await _handoff_store(hass).async_load() or {}
+    ledger = await _store(hass).async_load() or {}
     assert "someone-elses-token" in ledger

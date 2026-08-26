@@ -1080,7 +1080,7 @@ async def test_batch_update_rolls_back_when_the_reload_raises(
         hass,
         {"light.test1": {"brightness": {"100": "100"}}},
     )
-    original = dict(entry.data)
+    original = deepcopy(dict(entry.data))
     ws = await hass_ws_client(hass)
     with patch.object(
         hass.config_entries,
@@ -1113,7 +1113,7 @@ async def test_rollback_reload_that_raises_reports_degraded_runtime(
         hass,
         {"light.test1": {"brightness": {"100": "100"}}},
     )
-    original = dict(entry.data)
+    original = deepcopy(dict(entry.data))
     ws = await hass_ws_client(hass)
     with patch.object(
         hass.config_entries,
@@ -1180,7 +1180,7 @@ async def test_batch_update_rejects_a_duplicate_without_reload(
         hass,
         {"light.test1": {"brightness": {"100": "100"}}},
     )
-    original = dict(entry.data)
+    original = deepcopy(dict(entry.data))
     ws = await hass_ws_client(hass)
     with patch.object(
         hass.config_entries, "async_reload", new_callable=AsyncMock

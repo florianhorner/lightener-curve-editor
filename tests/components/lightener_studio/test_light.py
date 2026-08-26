@@ -1,6 +1,7 @@
 """Tests for the light platform."""
 
-from unittest.mock import ANY, AsyncMock, Mock, patch
+import inspect
+from unittest.mock import ANY, Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -22,6 +23,7 @@ from custom_components.lightener_studio.light import (
     scale_ranged_value_to_int_range,
     translate_config_to_brightness,
 )
+from custom_components.lightener_studio.observability import end_span
 
 
 async def test_turn_on_resilient_to_single_failure(
@@ -1070,6 +1072,10 @@ async def test_turn_on_records_the_error_and_unfreezes_on_failure(
             "translate_brightness",
             side_effect=RuntimeError("translation exploded"),
         ),
+        patch(
+            "custom_components.lightener_studio.light.end_span",
+            wraps=end_span,
+        ) as ended,
         pytest.raises(ExceptionGroup),
     ):
         await lightener.async_turn_on(brightness=128)
@@ -1077,6 +1083,19 @@ async def test_turn_on_records_the_error_and_unfreezes_on_failure(
     # The freeze guard is released even though the operation failed, otherwise
     # the Lightener would stop reacting to member state changes.
     assert lightener._is_frozen is False
+
+    # The span closes as an error naming the failure, not silently as "ok".
+    # Without this the whole error-recording path could be deleted and the
+    # unfreeze assertion above would still pass.
+    root_call = next(
+        call
+        for call in ended.call_args_list
+        if call.args[1].name == "lightener.turn_on"
+    )
+    assert root_call.kwargs["status"] == "error"
+    # The TaskGroup wraps the member failure, so the recorded type is the group
+    # rather than the RuntimeError raised inside translate_brightness.
+    assert root_call.kwargs["error_type"] == "ExceptionGroup"
 
 
 async def test_turn_off_records_the_error_and_unfreezes_on_failure(
@@ -1095,35 +1114,46 @@ async def test_turn_off_records_the_error_and_unfreezes_on_failure(
             "homeassistant.components.group.light.LightGroup.async_turn_off",
             side_effect=RuntimeError("group turn_off exploded"),
         ),
+        patch.object(
+            LightenerLight, "async_write_ha_state", autospec=True
+        ) as write_state,
+        patch(
+            "custom_components.lightener_studio.light.end_span",
+            wraps=end_span,
+        ) as ended,
         pytest.raises(RuntimeError, match="group turn_off exploded"),
     ):
         await lightener.async_turn_off()
 
     assert lightener._is_frozen is False
 
+    # "writes state" is half the docstring, so assert it: without the write the
+    # UI keeps showing the pre-failure state until something else touches it.
+    write_state.assert_called_once()
 
-async def test_sync_turn_on_and_turn_off_delegate_to_the_async_variants(
-    hass: HomeAssistant, create_lightener
-):
-    """The sync service entry points forward their kwargs unchanged."""
-    lightener: LightenerLight = await create_lightener(
-        config={
-            "friendly_name": "Test",
-            "entities": {"light.test1": {}},
-        }
+    root_call = next(
+        call
+        for call in ended.call_args_list
+        if call.args[1].name == "lightener.turn_off"
     )
+    assert root_call.kwargs["status"] == "error"
+    assert root_call.kwargs["error_type"] == "RuntimeError"
 
-    with patch.object(
-        LightenerLight, "async_turn_on", new_callable=AsyncMock
-    ) as turn_on:
-        await lightener.turn_on(brightness=42, transition=3)
-    turn_on.assert_awaited_once_with(brightness=42, transition=3)
 
-    with patch.object(
-        LightenerLight, "async_turn_off", new_callable=AsyncMock
-    ) as turn_off:
-        await lightener.turn_off(transition=1)
-    turn_off.assert_awaited_once_with(transition=1)
+async def test_no_sync_turn_on_or_turn_off_override(hass: HomeAssistant):
+    """LightenerLight must not override Home Assistant's SYNC entry points.
+
+    ``LightEntity.turn_on``/``turn_off`` are synchronous. The only caller is
+    ``Entity.async_turn_on`` (helpers/entity.py:1695), which hands them to
+    ``async_add_executor_job`` — and LightenerLight overrides ``async_turn_on``,
+    so that caller never runs. An ``async def turn_on`` here would therefore be
+    dead code, and if anything ever did reach it the executor would get an
+    un-awaited coroutine and the light would silently not turn on.
+    """
+    assert "turn_on" not in vars(LightenerLight)
+    assert "turn_off" not in vars(LightenerLight)
+    assert not inspect.iscoroutinefunction(LightenerLight.turn_on)
+    assert not inspect.iscoroutinefunction(LightenerLight.turn_off)
 
 
 async def test_controlled_light_type_is_none_when_the_light_is_unknown(hass):
@@ -1158,11 +1188,21 @@ async def test_group_state_ignores_members_outside_this_lightener(
     )
     hass.states.async_set("light.test1", "on", {"brightness": 255})
 
-    # Track an entity that is not part of this Lightener's controlled set.
-    lightener._entity_ids = [*lightener._entity_ids, "light.test2"]
+    # Track an entity that is not part of this Lightener's controlled set, and
+    # put it FIRST: the unknown id has to be skipped so the real member behind
+    # it still gets reconciled. Appending it instead would let an early return
+    # pass, because there would be nothing left to skip.
+    lightener._entity_ids = ["light.test2", *lightener._entity_ids]
     hass.states.async_set("light.test2", "on", {"brightness": 10})
+
+    # A stale level the reconciliation must overwrite from the real member.
+    lightener._attr_brightness = 7
+    lightener._prefered_brightness = 7
 
     lightener.async_update_group_state()
 
     assert "light.test2" not in lightener._entities_by_id
     assert lightener.is_on is True
+    # Reconciled from light.test1 (identity curve at 255), not from the skipped
+    # entity's 10 and not left at the stale 7.
+    assert lightener._attr_brightness == 255

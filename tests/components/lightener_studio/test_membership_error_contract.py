@@ -10,13 +10,21 @@ This test pins the *backend* set of codes. ``js/src/components/
 light-membership-dialog.errors.test.ts`` pins the frontend's handling of the
 same fixture. A new backend code that the editor has never heard of now fails
 here instead of reaching a user as an unhelpful fallback message.
+
+Scope, so the guarantee is not read wider than it is: this covers codes raised
+as ``MembershipError`` in ``membership.py``. ``websocket.py`` also answers with
+codes it passes straight to ``connection.send_error`` — ``unauthorized`` and
+``invalid_format`` come from the ``@require_admin`` decorator and the command
+schema, and are Home Assistant's own envelope rather than a domain rule. Those
+are pinned by ``test_send_error_codes_outside_the_contract_are_known`` below so
+a *new* one cannot appear unnoticed.
 """
 
 import ast
 import json
 from pathlib import Path
 
-from custom_components.lightener_studio import const, membership
+from custom_components.lightener_studio import const, membership, websocket
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "membership_errors_v1.json"
@@ -142,3 +150,91 @@ def test_every_raise_site_carries_a_user_facing_message() -> None:
         assert text.lower() != code.replace("_", " "), (
             f"line {line}: {code} message just restates the code"
         )
+
+
+# Codes ``websocket.py`` hands to ``connection.send_error`` directly, without
+# going through ``MembershipError``. They are not part of the membership
+# fixture — two are Home Assistant's own envelope and three belong to other
+# commands — but they DO reach the editor, so a new one appearing unreviewed
+# is exactly the drift this contract exists to stop.
+_KNOWN_DIRECT_SEND_ERROR_CODES = {
+    # Membership/curve commands, already described in the README error table.
+    "not_found",
+    "reload_failed",
+    # Home Assistant's envelope: @require_admin and the command schema answer
+    # before any handler code runs, so no domain rule can name these.
+    "unauthorized",
+    "invalid_format",
+    # Other websocket commands, outside the batch membership contract.
+    "already_exists",
+    "last_light",
+    "unknown_entities",
+}
+
+WEBSOCKET_SOURCE = Path(websocket.__file__)
+
+
+def _direct_send_error_codes() -> dict[str, list[int]]:
+    """Literal codes passed straight to ``connection.send_error``.
+
+    Non-literal arguments (``err.code``, the legacy remap in ``ws_add_light``)
+    are forwarding an already-classified error and are covered by the raise-site
+    walk above, so they are skipped here rather than guessed at.
+    """
+    tree = ast.parse(WEBSOCKET_SOURCE.read_text(encoding="utf-8"))
+    codes: dict[str, list[int]] = {}
+
+    for node in ast.walk(tree):
+        if (
+            not isinstance(node, ast.Call)
+            or not isinstance(node.func, ast.Attribute)
+            or node.func.attr != "send_error"
+            or len(node.args) < 2
+        ):
+            continue
+        code = _literal_str(node.args[1])
+        if code is not None:
+            codes.setdefault(code, []).append(node.lineno)
+
+    return codes
+
+
+def test_send_error_codes_outside_the_contract_are_known() -> None:
+    """No websocket command may invent a user-visible code unreviewed."""
+    found = _direct_send_error_codes()
+
+    unknown = {
+        code: lines
+        for code, lines in found.items()
+        if code not in _KNOWN_DIRECT_SEND_ERROR_CODES
+    }
+    assert not unknown, (
+        f"websocket.py sends error codes nobody declared: {unknown}. Either add "
+        "the code to tests/fixtures/membership_errors_v1.json (and the dialog) "
+        "if the editor must act on it, or to _KNOWN_DIRECT_SEND_ERROR_CODES "
+        "with a comment saying which command owns it."
+    )
+
+    stale = _KNOWN_DIRECT_SEND_ERROR_CODES - set(found)
+    assert not stale, (
+        f"declared codes no longer sent by websocket.py: {sorted(stale)}. Drop "
+        "them so the list keeps describing the real surface."
+    )
+
+
+def test_the_legacy_add_light_remap_only_targets_declared_codes() -> None:
+    """``ws_add_light`` rewrites some codes for cached older bundles.
+
+    The remap targets have to exist in the contract too, otherwise an old card
+    receives a code the dialog cannot render.
+    """
+    for code in ("invalid_format", "reload_failed"):
+        assert code in _KNOWN_DIRECT_SEND_ERROR_CODES or code in FIXTURE["errors"], code
+    # The sources of the remap are real membership codes.
+    for code in (
+        "not_a_light",
+        "self_reference",
+        "recursive_lightener",
+        "rollback_reload_failed",
+    ):
+        assert code in FIXTURE["errors"], code
