@@ -74,6 +74,18 @@ jobs:
         with:
           persist-credentials: false
 
+      # scripts/test-lint-dependabot runs scripts/lint-dependabot, which imports
+      # yaml. The ubuntu image happens to ship PyYAML today, so omitting this
+      # passes by accident and breaks whenever that changes. dependabot-config
+      # installs it too, but that is job-local.
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Install PyYAML"
+        run: python3 -m pip install pyyaml
+
       - name: "Test the release-line guards"
         # Fixture tests for scripts/assert-release-ref and
         # scripts/demo-freshness-check — builds throwaway git repos in a temp
