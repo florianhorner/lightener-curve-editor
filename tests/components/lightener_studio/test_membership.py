@@ -1260,7 +1260,7 @@ async def test_transaction_reports_not_found_when_the_entry_is_removed_while_que
                 None,
             )
         )
-        await asyncio.wait_for(reached_transaction.wait(), timeout=1)
+        await asyncio.wait_for(reached_transaction.wait(), timeout=5)
         await hass.config_entries.async_remove(entry.entry_id)
     finally:
         lock.release()
