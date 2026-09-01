@@ -368,8 +368,9 @@ describe('scrubber and preview events reach the card', () => {
 
     expect(internal._scrubberPosition).toBe(62);
     // The position is persisted so reopening the editor restores it.
-    const stored = Object.values({ ...sessionStorage }).join('');
-    expect(stored).toContain('62');
+    const stored = sessionStorage.getItem('lightener:curve-card:v1:light.lightener');
+    expect(stored).not.toBeNull();
+    expect(JSON.parse(stored!).scrubberPosition).toBe(62);
   });
 
   it('previews live while the scrubber moves with preview on', async () => {
