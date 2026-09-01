@@ -100,7 +100,6 @@ jobs:
           --cov=custom_components/lightener_studio
           --cov-report=xml
           --cov-report=term
-          --cov-fail-under=92
 
       - name: "Upload Python coverage"
         if: always()

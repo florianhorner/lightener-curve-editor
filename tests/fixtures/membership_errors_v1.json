@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "_comment": [
+    "Every error code the membership transaction can raise as a MembershipError.",
+    "The backend raises these; the dialog turns them into copy a user can act on.",
+    "The two sides live in different languages, so this fixture is the contract",
+    "between them, the same pattern curve_presets.json already uses for shapes.",
+    "",
+    "`copy` says where the user-facing text comes from:",
+    "  dedicated  - the dialog owns a specific string for this code, because the",
+    "               backend message is not actionable enough on its own.",
+    "  backend    - the dialog surfaces the backend message verbatim, so that",
+    "               message must itself read as user-facing copy.",
+    "  preferred  - the backend message wins when present (it names the entity),",
+    "               and the dialog has its own string for when it is absent.",
+    "",
+    "`batch_command` says whether lightener/set_controlled_lights can actually",
+    "return the code. The editor only ever calls that command, so a code with",
+    "false is unreachable from the dialog and is pinned on the Python side only.",
+    "See the membership error table in README.md for the recovery guidance and",
+    "for why too_many cannot surface there.",
+    "",
+    "Adding a backend code without adding it here fails the Python contract test.",
+    "Adding it here without the dialog handling it fails the frontend one."
+  ],
+  "errors": {
+    "empty_selection": {
+      "copy": "backend",
+      "batch_command": true,
+      "meaning": "The submitted selection contained no lights."
+    },
+    "too_many": {
+      "copy": "backend",
+      "batch_command": false,
+      "meaning": "The selection exceeded MAX_CONTROLLED_LIGHTS. Reachable only where the member list is built server-side (add_light, and the config/options flow); the batch command's schema bounds the list at the same limit and rejects an oversized payload as invalid_format first."
+    },
+    "duplicate": {
+      "copy": "backend",
+      "batch_command": true,
+      "meaning": "The same light appeared twice in the selection."
+    },
+    "not_a_light": {
+      "copy": "backend",
+      "batch_command": true,
+      "meaning": "A submitted entity id is not in the light domain."
+    },
+    "self_reference": {
+      "copy": "backend",
+      "batch_command": true,
+      "meaning": "The group was asked to control itself."
+    },
+    "recursive_lightener": {
+      "copy": "backend",
+      "batch_command": true,
+      "meaning": "A submitted light is itself a Lightener group."
+    },
+    "disabled_entity": {
+      "copy": "preferred",
+      "batch_command": true,
+      "meaning": "A newly added light is disabled in Home Assistant."
+    },
+    "not_found": {
+      "copy": "backend",
+      "batch_command": true,
+      "meaning": "The config entry or a submitted light no longer exists."
+    },
+    "conflict": {
+      "copy": "dedicated",
+      "batch_command": true,
+      "meaning": "The group changed since the editor loaded it."
+    },
+    "reload_failed": {
+      "copy": "dedicated",
+      "batch_command": true,
+      "meaning": "The write was rolled back; the previous state is intact."
+    },
+    "rollback_reload_failed": {
+      "copy": "dedicated",
+      "batch_command": true,
+      "meaning": "The write failed and the previous runtime could not be restored."
+    }
+  }
+}
