@@ -11,6 +11,23 @@
 # pip deps are in root requirements files, and there is no Dockerfile — so only
 # npm, pip, and github-actions are tracked.
 #
+# The pip `ignore` list is load-bearing too. requirements-ha-runtime.txt holds
+# versions Home Assistant owns, so a Dependabot bump there opens a PR that can
+# never go green. Nine of the eleven are exact pins in HA's own
+# package_constraints.txt and scripts/check-ha-runtime-pins fails CI when they
+# drift; pycountry and radios come from HA's radio_browser component manifest
+# instead, which that script never reads — they are ignored on the same
+# "HA owns this version" rationale, but with no CI signal behind it. None of the
+# eleven appear in requirements.txt or requirements-ha-test.txt, so ignoring them
+# blocks nothing else. `ignore` governs version updates only: a Dependabot
+# *security* update can still open a bump PR here, and it would need the same
+# manual reconciliation against HA's constraints.
+#
+# This list sits inside the BEGIN/END region that bootstrap-repo.sh replaces in
+# place, so scripts/lint-dependabot asserts it still names every pin in
+# requirements-ha-runtime.txt. Without that check a bootstrap run would delete
+# the list silently.
+#
 # Spec: https://github.com/florianhorner/engineering-standards/blob/main/specs/commit-message-spec.md#bot-allowlist
 # BEGIN: commit-message-standards
 version: 2
@@ -34,6 +51,20 @@ updates:
       prefix: "chore"
       prefix-development: "chore"
       include: "scope"
+    # HA owns these versions, not Dependabot. Must stay in sync with the pins
+    # in requirements-ha-runtime.txt — scripts/lint-dependabot enforces it.
+    ignore:
+      - dependency-name: "home-assistant-frontend"
+      - dependency-name: "PyTurboJPEG"
+      - dependency-name: "hassil"
+      - dependency-name: "home-assistant-intents"
+      - dependency-name: "mutagen"
+      - dependency-name: "av"
+      - dependency-name: "ha-ffmpeg"
+      - dependency-name: "pycountry"
+      - dependency-name: "radios"
+      - dependency-name: "pymicro-vad"
+      - dependency-name: "pyspeex-noise"
 
   - package-ecosystem: "github-actions"
     directory: "/"

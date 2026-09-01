@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+#
+# Fixture tests for lint-dependabot. The script resolves its inputs relative to
+# its own parent directory, so each case builds a throwaway repo tree, drops a
+# copy of the real script into it, and runs it there. No network, no real repo
+# state touched.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LINT="$SCRIPT_DIR/lint-dependabot"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+fail=0
+record() {
+  if [[ "$1" == "$2" ]]; then
+    printf '  ok    exit=%s  %s\n' "$2" "$3"
+  else
+    printf '  FAIL  want=%s got=%s  %s\n' "$1" "$2" "$3" >&2
+    fail=1
+  fi
+}
+
+# Build a fixture repo. $1 = case name, stdin = dependabot.yml body.
+fixture() {
+  local name="$1" root="$TMP/$1"
+  mkdir -p "$root/scripts" "$root/.github/workflows" "$root/js"
+  cp "$LINT" "$root/scripts/lint-dependabot"
+  printf '{}\n' > "$root/js/package.json"
+  printf 'colorlog>=6.9.0\n' > "$root/requirements.txt"
+  cat > "$root/requirements-ha-runtime.txt" <<'EOF'
+# Pins mirrored from Home Assistant's package_constraints.txt.
+PyTurboJPEG==1.8.0
+home-assistant-intents==2026.1.28
+radios==0.3.2
+EOF
+  cat > "$root/.github/dependabot.yml"
+  echo "$root"
+}
+
+# Emit a pip ecosystem block with the given dependency-name entries.
+pip_block() {
+  printf '  - package-ecosystem: "pip"\n    directory: "/"\n    schedule:\n      interval: "weekly"\n'
+  if [[ $# -gt 0 ]]; then
+    printf '    ignore:\n'
+    for name in "$@"; do printf '      - dependency-name: "%s"\n' "$name"; done
+  fi
+}
+
+run_case() { local root="$1" got=0; "$root/scripts/lint-dependabot" >/dev/null 2>&1 || got=$?; echo "$got"; }
+
+echo "lint-dependabot fixtures:"
+
+# 1. Every pinned package ignored — passes.
+root="$(fixture all-ignored <<EOF
+version: 2
+updates:
+$(pip_block PyTurboJPEG home-assistant-intents radios)
+EOF
+)"
+record 0 "$(run_case "$root")" "complete ignore list passes"
+
+# 2. The bootstrap-clobber case: BEGIN/END region regenerated without ignore.
+root="$(fixture clobbered <<EOF
+version: 2
+updates:
+$(pip_block)
+EOF
+)"
+record 1 "$(run_case "$root")" "ignore list wiped by a bootstrap run is caught"
+
+# 3. One pin dropped by hand.
+root="$(fixture partial <<EOF
+version: 2
+updates:
+$(pip_block PyTurboJPEG home-assistant-intents)
+EOF
+)"
+record 1 "$(run_case "$root")" "a single missing pin is caught"
+
+# 4. Misspelled name reads as missing.
+root="$(fixture typo <<EOF
+version: 2
+updates:
+$(pip_block PyTurboJPEG home-assistant-intent radios)
+EOF
+)"
+record 1 "$(run_case "$root")" "a mistyped dependency-name is caught"
+
+# 5. Stale entry for a pin that no longer exists blocks real updates.
+root="$(fixture stale <<EOF
+version: 2
+updates:
+$(pip_block PyTurboJPEG home-assistant-intents radios mutagen)
+EOF
+)"
+record 1 "$(run_case "$root")" "an entry with no matching pin is caught"
+
+# 6. A repo with no pip ecosystem at all is not forced to have the list.
+root="$(fixture no-pip <<'EOF'
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/js"
+    schedule:
+      interval: "weekly"
+EOF
+)"
+record 0 "$(run_case "$root")" "no pip ecosystem is not an error"
+
+# 7. Pre-existing classes still fire: duplicated top-level block.
+root="$(fixture duplicate <<EOF
+version: 2
+updates:
+$(pip_block PyTurboJPEG home-assistant-intents radios)
+version: 2
+updates:
+$(pip_block PyTurboJPEG home-assistant-intents radios)
+EOF
+)"
+record 1 "$(run_case "$root")" "duplicate top-level block still caught"
+
+# 8. The real repository must pass.
+real=0; python3 "$LINT" >/dev/null 2>&1 || real=$?
+record 0 "$real" "the real .github/dependabot.yml passes"
+
+if [[ "$fail" -ne 0 ]]; then
+  echo "lint-dependabot: FAILURES" >&2
+  exit 1
+fi
+echo "lint-dependabot: 8/8 cases pass"

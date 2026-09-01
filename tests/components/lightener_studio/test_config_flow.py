@@ -720,3 +720,47 @@ async def test_area_with_no_lights_sets_empty_include_entities(
 
     selector_config = get_entity_selector_config(result, "controlled_entities")
     assert selector_config["include_entities"] == []
+
+
+async def test_legacy_area_step_forwards_into_light_selection(
+    hass: HomeAssistant,
+) -> None:
+    """A flow resumed on the removed standalone `area` step lands on light
+    selection instead of raising UnknownStep, and still filters by the area."""
+
+    from homeassistant.helpers.area_registry import async_get as async_get_areas
+
+    area_registry = async_get_areas(hass)
+    kitchen = area_registry.async_create("Legacy Kitchen")
+    entity_registry = async_get_entity_registry(hass)
+    kitchen_light = entity_registry.async_get_or_create(
+        domain="light", platform="test", unique_id="legacy_kitchen_ceiling"
+    )
+    entity_registry.async_update_entity(kitchen_light.entity_id, area_id=kitchen.id)
+
+    flow = LightenerConfigFlow()
+    flow.hass = hass
+
+    result = await flow.async_step_area(user_input={"area_id": kitchen.id})
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "lights"
+    assert flow.lightener_flow.data["_area_filter"] == kitchen.id
+    # The forwarded area has to reach the rendered selector, not just the flow
+    # state: asserting the private key alone would pass with the filtering gone.
+    selector_config = get_entity_selector_config(result, "controlled_entities")
+    assert selector_config["include_entities"] == [kitchen_light.entity_id]
+
+
+async def test_legacy_area_step_without_input_forwards_without_a_filter(
+    hass: HomeAssistant,
+) -> None:
+    """Re-entering the removed step with no input forwards unfiltered."""
+    flow = LightenerConfigFlow()
+    flow.hass = hass
+
+    result = await flow.async_step_area()
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "lights"
+    assert "_area_filter" not in flow.lightener_flow.data
