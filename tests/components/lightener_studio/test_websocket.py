@@ -1402,8 +1402,7 @@ async def test_list_candidate_lights_missing_config_entry(
 ) -> None:
     """ws_list_candidate_lights returns not_found when the entry is gone."""
     config_entry = await _setup_lightener(hass)
-    await hass.config_entries.async_remove(config_entry.entry_id)
-    await hass.async_block_till_done()
+    hass.config_entries._entries.pop(config_entry.entry_id)
 
     ws = await hass_ws_client(hass)
     await ws.send_json(
@@ -1444,8 +1443,7 @@ async def test_set_controlled_lights_missing_config_entry(
 ) -> None:
     """ws_set_controlled_lights returns not_found when the entry is gone."""
     config_entry = await _setup_lightener(hass)
-    await hass.config_entries.async_remove(config_entry.entry_id)
-    await hass.async_block_till_done()
+    hass.config_entries._entries.pop(config_entry.entry_id)
 
     ws = await hass_ws_client(hass)
     await ws.send_json(
