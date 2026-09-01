@@ -252,11 +252,16 @@ Notes:
 | Ruff   | Linting + formatting | `ruff check . --fix` / `ruff format .` |
 | Mypy   | Type checking        | `mypy custom_components/lightener_studio/` |
 | Pytest | Unit tests           | `scripts/test-python` |
-| Coverage | Coverage check     | `scripts/test-python --cov=custom_components/lightener_studio --cov-fail-under=92` |
+| Coverage | Coverage check     | `scripts/test-python --cov=custom_components/lightener_studio` |
 
 Configuration lives in `pyproject.toml`. Ruff and Mypy still target `py312` /
 Python 3.12 there as tooling compatibility settings. Local backend pytest
 runtime is standardized on Python 3.13.
+
+The coverage floor is `fail_under` in `[tool.coverage.report]` and is the
+single source of truth. Do not pass `--cov-fail-under` on the command line:
+it overrides that value, so a stale number in this file would silently run a
+weaker gate locally than CI does.
 
 ### TypeScript (frontend)
 
