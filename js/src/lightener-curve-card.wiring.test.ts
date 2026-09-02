@@ -28,6 +28,8 @@ type CardInternals = {
   _stopPreview: () => void;
   _scrubberPosition: number | null;
   _coachPhase: string;
+  _coachShimmerStarted: boolean;
+  _coachShimmerActive: boolean;
   _membershipOpen: boolean;
   _dirtyVersion: number;
 };
@@ -168,6 +170,19 @@ describe('keyboard shortcuts are wired to the window', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it('undoes on Cmd+Z so the macOS binding works too', async () => {
+    const { card, internal } = await mountCard();
+    const undo = vi.spyOn(internal, '_undo').mockImplementation(() => {});
+    internal._undoStack = [internal._curves];
+    await card.updateComplete;
+
+    const event = new KeyboardEvent('keydown', { key: 'z', metaKey: true, cancelable: true });
+    window.dispatchEvent(event);
+
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('leaves Ctrl+Shift+Z alone so redo bindings stay available', async () => {
     const { card, internal } = await mountCard();
     const undo = vi.spyOn(internal, '_undo').mockImplementation(() => {});
@@ -283,6 +298,12 @@ describe('the first-run coach reacts to tab visibility', () => {
     });
   });
 
+  afterEach(() => {
+    // The override is an own property; deleting it hands `visibilityState`
+    // back to the Document prototype for the suites that follow.
+    delete (document as unknown as { visibilityState?: unknown }).visibilityState;
+  });
+
   async function mountFirstRunCard() {
     const hass = makeHass();
     const card = document.createElement('lightener-curve-card') as LightenerCurveCard;
@@ -295,8 +316,9 @@ describe('the first-run coach reacts to tab visibility', () => {
     return { card, internal: card as unknown as CardInternals };
   }
 
-  it('pauses the shimmer when the tab is hidden and resumes when it returns', async () => {
+  it('stops the shimmer for good once the tab is hidden', async () => {
     const { card, internal } = await mountFirstRunCard();
+    expect(internal._coachShimmerActive).toBe(true);
     const clear = vi.spyOn(window, 'clearTimeout');
 
     visibility = 'hidden';
@@ -308,9 +330,25 @@ describe('the first-run coach reacts to tab visibility', () => {
     document.dispatchEvent(new Event('visibilitychange'));
     await card.updateComplete;
 
-    // Hiding the tab tears the timer down; the card survives both transitions.
+    // Hiding tears the timer down. Coming back does not replay a hint the user
+    // already had a turn at: `_coachShimmerStarted` stays latched, so the
+    // shimmer is one-shot per mount.
     expect(clearsWhileHidden).toBeGreaterThan(0);
+    expect(internal._coachShimmerStarted).toBe(true);
+    expect(internal._coachShimmerActive).toBe(false);
     expect(internal._coachPhase).not.toBe('complete');
+  });
+
+  it('starts the shimmer on return when the card mounted on a hidden tab', async () => {
+    visibility = 'hidden';
+    const { card, internal } = await mountFirstRunCard();
+    expect(internal._coachShimmerStarted).toBe(false);
+
+    visibility = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await card.updateComplete;
+
+    expect(internal._coachShimmerActive).toBe(true);
   });
 
   it('detaches the visibility listener on disconnect', async () => {
@@ -438,9 +476,12 @@ describe('the Lovelace card contract', () => {
       getGridOptions: () => Record<string, number>;
     };
 
-    expect(sized.getCardSize()).toBeGreaterThan(0);
-    const grid = sized.getGridOptions();
-    expect(grid.min_columns).toBeLessThanOrEqual(grid.columns);
-    expect(grid.min_rows).toBeLessThanOrEqual(grid.rows);
+    expect(sized.getCardSize()).toBe(4);
+    expect(sized.getGridOptions()).toEqual({
+      columns: 12,
+      rows: 9,
+      min_columns: 6,
+      min_rows: 6,
+    });
   });
 });
