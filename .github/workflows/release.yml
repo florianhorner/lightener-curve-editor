@@ -21,7 +21,7 @@ jobs:
       contents: write
     steps:
       - name: "Checkout the repository"
-        uses: "actions/checkout@v4"
+        uses: "actions/checkout@v7"
         with:
           persist-credentials: false
           fetch-depth: 0 # full history so the demo freshness gate can diff sources
