@@ -16,12 +16,15 @@ export default defineConfig({
       include: ['src/**/*.ts', 'custom_components/lightener_studio/frontend/lightener-panel.js'],
       exclude: ['src/**/*.test.ts', 'src/**/*.bench.ts'],
       reporter: ['text', 'html', 'lcov'],
-      // Floor, not ratchet. Baseline after the wiring/touch/editor coverage PR
-      // is 92.25/85.82/94.21/94.35 (statements/branches/functions/lines), now
-      // that lightener-curve-card.ts and the panel are both INCLUDED — the card
-      // used to be exempt, so nothing guarded the largest file in the tree.
-      // Set ~4pp below to allow legitimate refactor churn; raise when the
-      // baseline moves.
+      // Floor, not ratchet, and aggregate rather than per-file. Measured on
+      // this branch: branches 86.05 (1672/1943), with statements, functions
+      // and lines around 92.45/94.23/94.57. Only the branch figure is exact —
+      // the other three move by a single covered unit between otherwise
+      // identical runs, so quoting them to two decimals would be a number
+      // nobody can reproduce. lightener-curve-card.ts and the panel are both
+      // INCLUDED now; the card used to be exempt, so nothing guarded the
+      // largest file in the tree. Set ~4pp below to allow legitimate refactor
+      // churn; raise when the baseline moves.
       thresholds: {
         lines: 90,
         branches: 81,
