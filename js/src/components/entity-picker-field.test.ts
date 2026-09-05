@@ -8,12 +8,16 @@
  * never reaches.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { html, render } from 'lit';
 import { renderEntityPickerField, type EntityPickerFieldOptions } from './entity-picker-field.js';
 import type { Hass } from '../utils/types.js';
 
 const HASS = { states: {}, user: { is_admin: true } } as unknown as Hass;
+
+afterEach(() => {
+  document.body.replaceChildren();
+});
 
 function mount(overrides: Partial<EntityPickerFieldOptions> = {}) {
   const onValueChanged = vi.fn();

@@ -187,7 +187,7 @@ describe('editing the config emits config-changed', () => {
     entityInput.value = '   ';
     entityInput.dispatchEvent(new Event('change'));
 
-    expect(changes[0].entity).toBeUndefined();
+    expect(changes[0]).not.toHaveProperty('entity');
   });
 
   it('commits the title on every keystroke and keeps the entity', async () => {
@@ -214,21 +214,27 @@ describe('editing the config emits config-changed', () => {
     titleInput.value = '';
     titleInput.dispatchEvent(new Event('input'));
 
-    expect(changes[0].title).toBeUndefined();
+    expect(changes[0]).not.toHaveProperty('title');
     expect(changes[0].entity).toBe('light.group_a');
   });
 
   it('bubbles config-changed out of the shadow root so Lovelace hears it', async () => {
     const { editor } = await mountEditor({ entity: 'light.group_a' });
     const heard: Array<Record<string, unknown>> = [];
-    document.body.addEventListener('config-changed', ((event: CustomEvent) => {
+    const listener = ((event: CustomEvent) => {
       heard.push(event.detail.config);
-    }) as EventListener);
+    }) as EventListener;
+    document.body.addEventListener('config-changed', listener);
 
-    const titleInput = editor.renderRoot.querySelectorAll('input')[1] as HTMLInputElement;
-    titleInput.value = 'Bubbled';
-    titleInput.dispatchEvent(new Event('input'));
+    try {
+      const titleInput = editor.renderRoot.querySelectorAll('input')[1] as HTMLInputElement;
+      titleInput.value = 'Bubbled';
+      titleInput.dispatchEvent(new Event('input'));
 
-    expect(heard).toHaveLength(1);
+      expect(heard).toHaveLength(1);
+    } finally {
+      // afterEach empties the body but never removes listeners registered on it.
+      document.body.removeEventListener('config-changed', listener);
+    }
   });
 });
